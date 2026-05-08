@@ -1,0 +1,113 @@
+name: 打包桌面客户端
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - main
+    tags:
+      - "v*"
+
+jobs:
+  windows-x64:
+    name: Windows x64 exe
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          architecture: "x64"
+          cache: pip
+
+      - name: 安装 Python 依赖
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -r requirements.txt "pyinstaller>=6.10,<7"
+
+      - name: 读取版本号
+        id: version
+        run: |
+          $script = @"
+          import ast
+          from pathlib import Path
+
+          values = {}
+          module = ast.parse(Path("src/config/settings.py").read_text(encoding="utf-8"))
+          for node in module.body:
+              if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+                  continue
+              target = node.targets[0]
+              if not isinstance(target, ast.Name):
+                  continue
+              try:
+                  values[target.id] = ast.literal_eval(node.value)
+              except (ValueError, SyntaxError):
+                  if isinstance(node.value, ast.Name):
+                      values[target.id] = values.get(node.value.id, "")
+
+          print(values.get("APP_VERSION") or values.get("APP_VERSION_NAME") or "1.0.0")
+          "@
+          $version = (python -c $script).Trim()
+          "app_version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: 构建 Windows x64 exe
+        run: ./scripts/build-windows-x64.ps1
+
+      - name: 压缩 Windows 产物
+        run: |
+          $artifactName = "hcly-behavior-desktop_${{ steps.version.outputs.app_version }}_windows-x64"
+          Compress-Archive `
+            -Path "dist/windows-x64/hcly-behavior-desktop" `
+            -DestinationPath "dist/windows-x64/$artifactName.zip" `
+            -Force
+
+      - name: 上传 Windows 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: hcly-behavior-desktop_${{ steps.version.outputs.app_version }}_windows-x64
+          path: dist/windows-x64/*.zip
+          if-no-files-found: error
+
+  linux-deb:
+    name: Linux ${{ matrix.arch }} deb
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - amd64
+          - arm64
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 配置 arm64 模拟环境
+        if: matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: 构建 Linux ${{ matrix.arch }} deb
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash "docker/build-deb-${{ matrix.arch }}.sh"
+
+      - name: 上传 Linux ${{ matrix.arch }} deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: hcly-behavior-desktop_linux-${{ matrix.arch }}_deb
+          path: docker/dist/*.deb
+          if-no-files-found: error
