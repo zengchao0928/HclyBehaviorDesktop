@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import NetworkInspector 1.0
 import "components"
 
 ApplicationWindow {
@@ -13,7 +14,7 @@ ApplicationWindow {
     height: windowConfig ? windowConfig.windowHeight : 800
     minimumWidth: windowConfig ? windowConfig.windowMinWidth : 1280
     minimumHeight: windowConfig ? windowConfig.windowMinHeight : 800
-    title: windowConfig ? windowConfig.appName : "行为记录桌面端"
+    title: windowConfig ? windowConfig.appName : "留置中心"
     color: "#0D1724"
 
     background: Rectangle {
@@ -38,6 +39,21 @@ ApplicationWindow {
                 runtimeController.showToast("页面创建失败", "error", 2400)
             }
             return null
+        }
+
+        if (pageName === "password") {
+            page.passwordVerified.connect(function() {
+                windowManager.replaceWithPage("settings")
+            })
+            page.backRequested.connect(function() {
+                windowManager.goBack()
+            })
+        }
+
+        if (pageName === "settings" || pageName === "network") {
+            page.backRequested.connect(function() {
+                windowManager.goBack()
+            })
         }
 
         return page
@@ -130,6 +146,17 @@ ApplicationWindow {
 
     Toast {
         id: globalToast
+    }
+
+    NetworkFloatingButton {
+        id: networkFloatingButton
+        inspector: typeof networkInspector !== "undefined" ? networkInspector : null
+        anchors.right: parent.right
+        anchors.rightMargin: 32
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 32
+        z: 997
+        onClicked: windowManager.switchToPage("network")
     }
 
     Item {

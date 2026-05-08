@@ -1,0 +1,4 @@
+module NetworkInspector
+NetworkFloatingButton 1.0 NetworkFloatingButton.qml
+NetworkLogPage 1.0 NetworkLogPage.qml
+NetworkLogDetailPage 1.0 NetworkLogDetailPage.qml

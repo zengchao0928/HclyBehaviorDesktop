@@ -4,7 +4,7 @@
 应用配置。
 """
 
-APP_NAME = "行为记录桌面端"
+APP_NAME = "留置中心"
 APP_VERSION_NAME = "1.0.0"
 APP_VERSION_CODE = 10000
 APP_VERSION = APP_VERSION_NAME

@@ -15,11 +15,12 @@ from PySide6.QtGui import QFont, QFontDatabase, QGuiApplication, QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 
 from src.config.app_config import AppConfig
+from src.controllers.behavior_controller import BehaviorController
 from src.controllers.login_controller import LoginController
-from src.controllers.screen_type_controller import ScreenTypeController
 from src.core.app_runtime import AppRuntime, setup_logging
 from src.core.window_manager import WindowManager
 from src.utils.exception_handler import install_global_exception_handlers
+from library.network_chucker import NetworkInspector, set_global_inspector
 
 
 def _configure_qt_quick_controls_style(logger: logging.Logger) -> None:
@@ -128,27 +129,31 @@ def main() -> None:
 
     app = QGuiApplication(sys.argv)
     app.setOrganizationName("Hcly")
-    app.setApplicationName("行为记录桌面端")
+    app.setApplicationName("留置中心")
     _configure_app_font(app, logger)
     _configure_app_icon(app, logger)
 
     engine = QQmlApplicationEngine()
     qml_dir = Path(__file__).parent / "qml"
     engine.addImportPath(str(qml_dir))
+    engine.addImportPath(str(Path(__file__).parent / "library" / "network_chucker" / "qml"))
 
     app_config = AppConfig()
     app_runtime = AppRuntime()
     install_global_exception_handlers(app_runtime)
 
     login_controller = LoginController()
-    screen_type_controller = ScreenTypeController()
+    behavior_controller = BehaviorController()
     window_manager = WindowManager()
+    network_inspector = NetworkInspector()
+    set_global_inspector(network_inspector)
 
     engine.rootContext().setContextProperty("appConfig", app_config)
     engine.rootContext().setContextProperty("appRuntime", app_runtime)
     engine.rootContext().setContextProperty("loginController", login_controller)
-    engine.rootContext().setContextProperty("screenTypeController", screen_type_controller)
+    engine.rootContext().setContextProperty("behaviorController", behavior_controller)
     engine.rootContext().setContextProperty("windowManager", window_manager)
+    engine.rootContext().setContextProperty("networkInspector", network_inspector)
 
     qml_file = qml_dir / "MainWindow.qml"
     engine.load(QUrl.fromLocalFile(str(qml_file)))

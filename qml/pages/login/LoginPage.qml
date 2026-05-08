@@ -11,7 +11,6 @@ Item {
     clip: true
     property bool loginPending: false
     property bool passwordVisible: false
-    property var deviceSettingsController: typeof screenTypeController !== "undefined" ? screenTypeController : null
 
     component LoginInputIconButton: Item {
         id: iconButton
@@ -117,9 +116,6 @@ Item {
     }
 
     Component.onCompleted: {
-        if (deviceSettingsController) {
-            deviceSettingsController.refreshScreenType()
-        }
         if (typeof networkInspector !== "undefined" && networkInspector) {
             networkInspector.clear()
         }
@@ -139,6 +135,7 @@ Item {
             loadingOverlay.hideLoading()
             if (success) {
                 toast.showSuccess(message || "登录成功")
+                windowManager.replaceWithPage("behavior")
                 return
             }
             toast.showError(message || "登录失败")

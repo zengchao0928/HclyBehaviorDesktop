@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+import uuid
 from urllib.parse import urlparse
 from urllib.parse import urljoin
 
@@ -14,20 +16,10 @@ import requests
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from src.config.settings import API_CONNECT_TIMEOUT, API_TIMEOUT
+from library.network_chucker import get_global_inspector
 
 
 _logger = logging.getLogger(__name__)
-_SENSITIVE_LOG_KEYS = (
-    "authorization",
-    "password",
-    "passwd",
-    "token",
-    "secret",
-    "access_token",
-    "refresh_token",
-    "userPwd",
-)
-
 _NO_PROXY_PREFIXES = (
     "10.",
     "172.16.",
@@ -62,44 +54,21 @@ def _should_bypass_proxy(url: str) -> bool:
     return any(host.startswith(prefix) for prefix in _NO_PROXY_PREFIXES)
 
 
-def _redact_sensitive(value):
-    """递归脱敏网络日志中的敏感字段。"""
-    if isinstance(value, dict):
-        if {"code", "data"}.issubset(value.keys()) and isinstance(value.get("data"), str):
-            value = dict(value)
-            value["data"] = "***"
-
-        redacted = {}
-        for key, item in value.items():
-            key_text = str(key).lower()
-            if any(sensitive_key.lower() in key_text for sensitive_key in _SENSITIVE_LOG_KEYS):
-                redacted[key] = "***"
-            else:
-                redacted[key] = _redact_sensitive(item)
-        return redacted
-
-    if isinstance(value, list):
-        return [_redact_sensitive(item) for item in value]
-
-    return value
-
-
-def _format_log_value(value, max_chars: int = 3000) -> str:
-    """把网络请求/响应内容转成适合日志的短文本。"""
+def _format_log_value(value, max_chars: int = 20000) -> str:
+    """把网络请求/响应内容完整转成适合日志的文本。"""
     if value is None or value == "":
         return ""
 
-    redacted_value = _redact_sensitive(value)
-    if isinstance(redacted_value, str):
-        text = redacted_value.strip()
+    if isinstance(value, str):
+        text = value.strip()
         if text.startswith("{") or text.startswith("["):
             try:
                 parsed = json.loads(text)
-                text = json.dumps(_redact_sensitive(parsed), ensure_ascii=False)
+                text = json.dumps(parsed, ensure_ascii=False)
             except json.JSONDecodeError:
                 pass
     else:
-        text = json.dumps(redacted_value, ensure_ascii=False, default=str)
+        text = json.dumps(value, ensure_ascii=False, default=str)
 
     if len(text) > max_chars:
         return f"{text[:max_chars]}...(已截断)"
@@ -110,6 +79,8 @@ class NetworkWorker(QThread):
     """网络请求工作线程。"""
 
     requestFinished = Signal(bool, str)
+    requestLogStarted = Signal(dict)
+    requestLogFinished = Signal(dict)
 
     def __init__(self, method, url, data=None, use_json=True, headers=None, timeout=None):
         super().__init__()
@@ -120,9 +91,20 @@ class NetworkWorker(QThread):
         self.headers = headers or {}
         self.timeout = timeout or API_TIMEOUT
         self.bypass_proxy = _should_bypass_proxy(self.url)
+        self.request_id = uuid.uuid4().hex
 
     def run(self):
         """在子线程中执行网络请求。"""
+        start_time = time.time()
+        self.requestLogStarted.emit({
+            "request_id": self.request_id,
+            "method": self.method,
+            "url": self.url,
+            "headers": self.headers,
+            "body": self.data,
+            "started_at": start_time,
+        })
+
         try:
             timeout_tuple = (API_CONNECT_TIMEOUT, self.timeout)
             session = requests.Session()
@@ -172,6 +154,9 @@ class NetworkWorker(QThread):
 
             success = response.status_code == 200
             response_body = response.text
+            response_headers = dict(response.headers)
+            elapsed_time = time.time() - start_time
+            error_message = "" if success else f"服务器错误: {response.status_code}"
             log_method = _logger.info if success else _logger.warning
             log_method(
                 "网络请求完成: method=%s url=%s success=%s status=%s response=%s",
@@ -182,18 +167,47 @@ class NetworkWorker(QThread):
                 _format_log_value(response_body),
             )
 
+            self.requestLogFinished.emit({
+                "request_id": self.request_id,
+                "success": success,
+                "status_code": response.status_code,
+                "reason": response.reason,
+                "response_headers": response_headers,
+                "response_body": response_body,
+                "elapsed_ms": elapsed_time * 1000,
+                "error_message": error_message,
+            })
+
             if success:
                 self.requestFinished.emit(True, response_body)
             else:
-                self.requestFinished.emit(False, f"服务器错误: {response.status_code}")
+                self.requestFinished.emit(False, error_message)
         except requests.exceptions.Timeout:
             _logger.warning("网络请求超时: method=%s url=%s", self.method, self.url)
+            self.requestLogFinished.emit({
+                "request_id": self.request_id,
+                "success": False,
+                "elapsed_ms": (time.time() - start_time) * 1000,
+                "error_message": "请求超时，请检查网络连接",
+            })
             self.requestFinished.emit(False, "请求超时，请检查网络连接")
         except requests.exceptions.ConnectionError:
             _logger.warning("网络连接失败: method=%s url=%s", self.method, self.url)
+            self.requestLogFinished.emit({
+                "request_id": self.request_id,
+                "success": False,
+                "elapsed_ms": (time.time() - start_time) * 1000,
+                "error_message": "无法连接到服务器，请检查网络",
+            })
             self.requestFinished.emit(False, "无法连接到服务器，请检查网络")
         except Exception as exc:
             _logger.exception("网络请求异常: method=%s url=%s", self.method, self.url)
+            self.requestLogFinished.emit({
+                "request_id": self.request_id,
+                "success": False,
+                "elapsed_ms": (time.time() - start_time) * 1000,
+                "error_message": str(exc),
+            })
             self.requestFinished.emit(False, str(exc))
 
 
@@ -201,6 +215,7 @@ class NetworkManager(QObject):
     """网络请求管理器。"""
 
     requestFinished = Signal(bool, str)
+    idle = Signal()
 
     def __init__(self, base_url=""):
         super().__init__()
@@ -248,9 +263,23 @@ class NetworkManager(QObject):
         headers = self._get_headers()
         full_url = self._build_url(url)
         self._worker = NetworkWorker(method, full_url, data, use_json, headers, timeout)
+        self._worker.requestLogStarted.connect(self._record_request_started)
+        self._worker.requestLogFinished.connect(self._record_request_finished)
         self._worker.requestFinished.connect(self._on_request_finished)
         self._worker.finished.connect(self._on_worker_finished)
         self._worker.start()
+
+    def _record_request_started(self, payload):
+        """记录网络请求开始。"""
+        inspector = get_global_inspector()
+        if inspector is not None:
+            inspector.record_request_started(payload)
+
+    def _record_request_finished(self, payload):
+        """记录网络请求结束。"""
+        inspector = get_global_inspector()
+        if inspector is not None:
+            inspector.record_request_finished(payload)
 
     def _on_request_finished(self, success, response):
         """请求完成回调。"""
@@ -266,3 +295,4 @@ class NetworkManager(QObject):
         worker.deleteLater()
         if self._worker is worker:
             self._worker = None
+        self.idle.emit()

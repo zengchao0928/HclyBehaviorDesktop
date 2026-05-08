@@ -6,10 +6,11 @@
 from __future__ import annotations
 
 import logging
+import os
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Property, Signal, Slot
+from PySide6.QtCore import QObject, Property, QCoreApplication, Signal, Slot
 
 from src.config.settings import AUTO_RESTART_DELAY_MS, AUTO_RESTART_ON_FATAL
 
@@ -135,3 +136,14 @@ class AppRuntime(QObject):
         self._fatal_error_message = ""
         self._fatal_error_details = ""
         self.fatalErrorChanged.emit()
+
+    @Slot()
+    def quitApplication(self):
+        """退出应用。"""
+        logging.getLogger(__name__).info("Quit requested by application")
+        app = QCoreApplication.instance()
+        if app is not None:
+            app.quit()
+            return
+
+        os._exit(0)
