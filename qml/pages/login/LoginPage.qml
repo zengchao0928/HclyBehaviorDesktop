@@ -138,16 +138,7 @@ Item {
             loginPage.loginPending = false
             loadingOverlay.hideLoading()
             if (success) {
-                var nextPage = ""
-                if (loginPage.deviceSettingsController) {
-                    loginPage.deviceSettingsController.refreshScreenType()
-                    nextPage = loginPage.deviceSettingsController.currentRoutePage()
-                }
-                if (!nextPage) {
-                    toast.showError(loginPage.deviceSettingsController ? loginPage.deviceSettingsController.missingRouteMessage : "没有找到当前屏幕类型对应的界面")
-                    return
-                }
-                windowManager.replaceWithPage(nextPage)
+                toast.showSuccess(message || "登录成功")
                 return
             }
             toast.showError(message || "登录失败")

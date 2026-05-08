@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QUrl
-from PySide6.QtGui import QFont, QFontDatabase, QGuiApplication
+from PySide6.QtGui import QFont, QFontDatabase, QGuiApplication, QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 
 from src.config.app_config import AppConfig
@@ -91,8 +91,23 @@ def _configure_app_font(app: QGuiApplication, logger: logging.Logger) -> None:
     app.setFont(font)
 
 
+def _configure_app_icon(app: QGuiApplication, logger: logging.Logger) -> None:
+    """设置应用窗口图标。"""
+    icon_path = Path(__file__).parent / "resources" / "icons" / "app_icon.png"
+    if not icon_path.is_file():
+        logger.warning("应用图标不存在: %s", icon_path)
+        return
+
+    app.setWindowIcon(QIcon(str(icon_path)))
+    logger.info("Application icon configured: %s", icon_path)
+
+
 def _apply_window_mode(root_window, logger: logging.Logger) -> None:
     """以普通桌面窗口启动，并限制最小窗口尺寸。"""
+    app_icon = QGuiApplication.windowIcon()
+    if not app_icon.isNull():
+        root_window.setIcon(app_icon)
+
     root_window.show()
     root_window.requestActivate()
     logger.info(
@@ -115,6 +130,7 @@ def main() -> None:
     app.setOrganizationName("Hcly")
     app.setApplicationName("行为记录桌面端")
     _configure_app_font(app, logger)
+    _configure_app_icon(app, logger)
 
     engine = QQmlApplicationEngine()
     qml_dir = Path(__file__).parent / "qml"
