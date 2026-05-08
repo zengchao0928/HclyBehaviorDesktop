@@ -339,6 +339,17 @@ class BehaviorController(QObject):
 
     @Slot(str)
     @fatal_slot
+    def selectBehaviourById(self, content_id):
+        """按行为项 id 选择行为，避免 QML 对象跨平台转换差异。"""
+        content = self._find_item(self.currentContents, content_id)
+        if not content:
+            return
+        self._selected_content = dict(content)
+        self._remark = self._selected_content.get("name", "")
+        self.dataChanged.emit()
+
+    @Slot(str)
+    @fatal_slot
     def setRemark(self, remark):
         """设置备注内容。"""
         self._remark = str(remark or "")

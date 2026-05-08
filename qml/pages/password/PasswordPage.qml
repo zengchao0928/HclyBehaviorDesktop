@@ -16,7 +16,7 @@ Item {
 
     property string currentPassword: ""
     property int maxPasswordLength: 6
-    property string correctPassword: "111111"
+    property string correctPassword: "010605"
     readonly property var keypadButtons: [
         { "label": "1", "value": "1" },
         { "label": "2", "value": "2" },

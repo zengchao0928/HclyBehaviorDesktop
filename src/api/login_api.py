@@ -5,7 +5,6 @@
 """
 from PySide6.QtCore import QObject, Signal
 
-from src.config.settings import API_BASE_URL
 from src.core.network import NetworkManager
 
 
@@ -16,7 +15,7 @@ class LoginApi(QObject):
 
     def __init__(self):
         super().__init__()
-        self.network_manager = NetworkManager(API_BASE_URL)
+        self.network_manager = NetworkManager()
         self.network_manager.requestFinished.connect(self._on_request_finished)
 
     def login(self, username, password):

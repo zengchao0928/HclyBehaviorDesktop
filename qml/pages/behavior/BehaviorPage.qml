@@ -465,7 +465,7 @@ Item {
                             width: parent.width
                             height: parent.height - behaviorPage.sp(60)
                             cellWidth: width / 7
-                            cellHeight: behaviorPage.sp(150)
+                            cellHeight: behaviorPage.sp(172)
                             clip: true
                             model: controller ? controller.currentContents : []
 
@@ -473,12 +473,14 @@ Item {
                                 width: actionGrid.cellWidth
                                 height: actionGrid.cellHeight
 
-                                readonly property bool selected: controller && controller.selectedContent && controller.selectedContent.name === modelData.name
+                                readonly property bool selected: controller && controller.selectedContent && controller.selectedContent.id === modelData.id
 
                                 Column {
                                     anchors.horizontalCenter: parent.horizontalCenter
+                                    anchors.top: parent.top
+                                    anchors.topMargin: behaviorPage.sp(8)
                                     width: parent.width
-                                    spacing: behaviorPage.sp(6)
+                                    spacing: behaviorPage.sp(10)
 
                                     Rectangle {
                                         width: behaviorPage.sp(114)
@@ -512,18 +514,22 @@ Item {
 
                                     Text {
                                         width: parent.width
+                                        height: behaviorPage.sp(32)
                                         text: modelData.name
                                         color: selected ? "#22FFAE" : "#FFFFFF"
                                         font.pixelSize: behaviorPage.sp(22)
                                         horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
                                         elide: Text.ElideRight
                                     }
                                 }
 
-                                MouseArea {
-                                    anchors.fill: parent
+                                TapHandler {
+                                    acceptedButtons: Qt.LeftButton
+                                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.TouchScreen
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: if (controller) controller.selectBehaviour(modelData)
+                                    gesturePolicy: TapHandler.ReleaseWithinBounds
+                                    onTapped: if (controller) controller.selectBehaviourById(modelData.id)
                                 }
                             }
                         }

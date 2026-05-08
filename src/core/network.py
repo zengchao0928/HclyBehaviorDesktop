@@ -15,7 +15,7 @@ from urllib.parse import urljoin
 import requests
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
-from src.config.settings import API_CONNECT_TIMEOUT, API_TIMEOUT
+from src.config.settings import API_BASE_URL, API_CONNECT_TIMEOUT, API_TIMEOUT
 from library.network_chucker import get_global_inspector
 
 
@@ -217,9 +217,9 @@ class NetworkManager(QObject):
     requestFinished = Signal(bool, str)
     idle = Signal()
 
-    def __init__(self, base_url=""):
+    def __init__(self, base_url=None):
         super().__init__()
-        self.base_url = str(base_url or "")
+        self.base_url = str(API_BASE_URL if base_url is None else base_url)
         self._worker = None
 
     def post_json(self, url, data):

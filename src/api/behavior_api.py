@@ -5,7 +5,6 @@
 """
 from PySide6.QtCore import QObject, Signal
 
-from src.config.settings import API_BASE_URL
 from src.core.network import NetworkManager
 
 
@@ -22,7 +21,7 @@ class BehaviorApi(QObject):
     def _send_post(self, request_name: str, path: str, data=None):
         self._request_index += 1
         request_id = f"{request_name}_{self._request_index}"
-        manager = NetworkManager(API_BASE_URL)
+        manager = NetworkManager()
         self._active_managers[request_id] = manager
         manager.requestFinished.connect(
             lambda success, response, rid=request_id, name=request_name: self._on_request_finished(
