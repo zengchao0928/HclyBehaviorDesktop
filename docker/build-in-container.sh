@@ -138,6 +138,7 @@ fi
 
 export QT_QUICK_CONTROLS_STYLE="\${QT_QUICK_CONTROLS_STYLE:-Basic}"
 export QT_QPA_PLATFORM="\${QT_QPA_PLATFORM:-xcb}"
+export QT_XCB_GL_INTEGRATION="\${QT_XCB_GL_INTEGRATION:-none}"
 export QT_PLUGIN_PATH="\${APP_DIR}/_internal/PySide6/Qt/plugins\${QT_PLUGIN_PATH:+:\${QT_PLUGIN_PATH}}"
 export QT_QPA_PLATFORM_PLUGIN_PATH="\${APP_DIR}/_internal/PySide6/Qt/plugins/platforms"
 export QML_IMPORT_PATH="\${APP_DIR}/_internal/PySide6/Qt/qml:\${APP_DIR}/_internal/qml:\${APP_DIR}/_internal/library/network_chucker/qml\${QML_IMPORT_PATH:+:\${QML_IMPORT_PATH}}"
@@ -180,6 +181,7 @@ if [[ "\${HCLY_DEBUG_LAUNCH:-0}" == "1" ]]; then
     printf 'SYSTEM_GLIBC_VERSION=%s\n' "\${SYSTEM_GLIBC_VERSION:-unknown}" >&2
     printf 'USE_BUNDLED_GLIBC=%s\n' "\${USE_BUNDLED_GLIBC}" >&2
     printf 'QT_QPA_PLATFORM=%s\n' "\${QT_QPA_PLATFORM}" >&2
+    printf 'QT_XCB_GL_INTEGRATION=%s\n' "\${QT_XCB_GL_INTEGRATION}" >&2
     printf 'HCLY_SOFTWARE_RENDERING=%s\n' "\${HCLY_SOFTWARE_RENDERING:-1}" >&2
 fi
 
@@ -565,6 +567,7 @@ make_deb_package() {
     cat > "${deb_root}/usr/bin/${APP_ID}" <<EOF
 #!/usr/bin/env bash
 export QT_QPA_PLATFORM="\${QT_QPA_PLATFORM:-xcb}"
+export QT_XCB_GL_INTEGRATION="\${QT_XCB_GL_INTEGRATION:-none}"
 exec /opt/${APP_ID}/${APP_ID} "\$@"
 EOF
     chmod 0755 "${deb_root}/usr/bin/${APP_ID}"
@@ -574,7 +577,7 @@ EOF
 Type=Application
 Version=1.0
 Name=${APP_DISPLAY_NAME}
-Exec=env QT_QPA_PLATFORM=xcb /usr/bin/${APP_ID}
+Exec=/usr/bin/${APP_ID}
 Icon=${APP_ID}
 Terminal=false
 Categories=Utility;

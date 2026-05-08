@@ -29,7 +29,7 @@ sudo dpkg -i hcly-behavior-desktop_1.0.0_arm64.deb
 sudo dpkg -r hcly-behavior-desktop
 ```
 
-这个 deb 默认不声明外部 apt 依赖，包内会携带 Python、PySide6、QML、图片资源和 glibc 兼容层；目标机仍需要 Linux 图形桌面、兼容的 Qt/X11 系统库、内核以及显示驱动。安装时会给执行 `sudo dpkg -i` 的桌面用户创建桌面快捷方式，`sudo dpkg -r` 卸载时会删除这个快捷方式。
+这个 deb 默认不声明外部 apt 依赖，包内会携带 Python、PySide6、QML、图片资源和 glibc 兼容层；arm64 包还会默认携带 Qt/xcb 依赖，避免 RK 板图形库缺失时启动 abort。目标机仍需要 Linux 图形桌面、内核以及显示驱动。安装时会给执行 `sudo dpkg -i` 的桌面用户创建桌面快捷方式，`sudo dpkg -r` 卸载时会删除这个快捷方式。
 
 启动器日志默认写入 `/opt/hcly-behavior-desktop/logs/launcher.log`，只有应用目录日志不可写时才回退到用户目录 `~/.hcly_behavior_desktop/logs/launcher.log`。
 
@@ -48,7 +48,7 @@ BUNDLE_GLIBC=0 bash docker/build-deb-amd64.sh
 - `KEEP_WAYLAND=1`：额外保留 Wayland 平台插件，体积会稍大。
 - `KEEP_EXTRA_QML=1`：保留更多 Qt QML 模块，适合遇到缺模块错误时排查。
 - `ENABLE_UPX=1`：启用 UPX 压缩；体积更小，但 Qt 动态库在部分系统上可能不稳定。
-- `BUNDLE_SYSTEM_LIBS=1`：额外携带 Qt/X11 等系统库，兼容性更强但体积明显变大。
+- `BUNDLE_SYSTEM_LIBS=1`：额外携带 Qt/X11 等系统库，兼容性更强但体积明显变大；arm64 构建脚本默认启用，可用 `BUNDLE_SYSTEM_LIBS=0 bash docker/build-deb-arm64.sh` 关闭。
 - `BUNDLE_GLIBC=0`：不携带 glibc，体积更小，但目标机 glibc 偏老时会无法启动。
 
 ## 目标机排查

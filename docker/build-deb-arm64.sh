@@ -6,6 +6,7 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 export DOCKER_PLATFORM="linux/arm64"
 export DOCKER_IMAGE="hcly-behavior-desktop-packager:py311-bullseye-arm64"
+export BUNDLE_SYSTEM_LIBS="${BUNDLE_SYSTEM_LIBS:-1}"
 
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/package.env"
