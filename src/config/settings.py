@@ -9,7 +9,11 @@ APP_VERSION_NAME = "1.0.0"
 APP_VERSION_CODE = 1
 APP_VERSION = APP_VERSION_NAME
 
-API_BASE_URL = "http://10.1.100.126:8085/"
+from src.config.runtime_config import get_config_path, load_api_base_url
+
+DEFAULT_API_BASE_URL = "http://10.1.100.126:8085/"
+API_BASE_URL = load_api_base_url(DEFAULT_API_BASE_URL)
+CONFIG_FILE_PATH = str(get_config_path())
 API_CONNECT_TIMEOUT = 5
 API_TIMEOUT = 5
 

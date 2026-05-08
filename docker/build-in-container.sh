@@ -54,6 +54,48 @@ build_app() {
     [[ -x "${APP_BIN}" ]] || die "未找到 PyInstaller 主程序: ${APP_BIN}"
 }
 
+write_default_config() {
+    log "写入默认接口配置"
+    local default_base_url
+    default_base_url="$(
+        python - "${PROJECT_ROOT}/src/config/settings.py" <<'PY'
+import ast
+import sys
+from pathlib import Path
+
+settings_path = Path(sys.argv[1])
+module = ast.parse(settings_path.read_text(encoding="utf-8"))
+values = {}
+for node in module.body:
+    if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+        continue
+    target = node.targets[0]
+    if not isinstance(target, ast.Name):
+        continue
+    try:
+        values[target.id] = ast.literal_eval(node.value)
+    except (ValueError, SyntaxError):
+        pass
+
+print(values.get("DEFAULT_API_BASE_URL") or "http://10.1.100.126:8085/")
+PY
+    )"
+
+    python - "${APP_BUNDLE}/config.json" "${default_base_url}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+config_path = Path(sys.argv[1])
+base_url = sys.argv[2]
+config_path.write_text(
+    json.dumps({"baseUrl": base_url}, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+PY
+    chmod 0666 "${APP_BUNDLE}/config.json"
+}
+
 write_launcher() {
     log "写入应用启动脚本"
     cat > "${APP_LAUNCHER}" <<EOF
@@ -69,15 +111,9 @@ done
 APP_DIR="\$(cd -P "\$(dirname "\${SELF_PATH}")" && pwd)"
 
 if [[ "\${HCLY_LAUNCH_LOG:-1}" == "1" ]]; then
-    if [[ -n "\${HOME:-}" && -d "\${HOME}/Desktop" ]]; then
-        LOG_DIR="\${HOME}/Desktop"
-    elif [[ -n "\${HOME:-}" && -d "\${HOME}/桌面" ]]; then
-        LOG_DIR="\${HOME}/桌面"
-    else
-        LOG_DIR="\${HOME:-/tmp}/.hcly_behavior_desktop/logs"
-    fi
+    LOG_DIR="\${APP_DIR}/logs"
     LAUNCH_LOG="\${LOG_DIR}/launcher.log"
-    if mkdir -p "\${LOG_DIR}" 2>/dev/null && touch "\${LAUNCH_LOG}" 2>/dev/null; then
+    if touch "\${LAUNCH_LOG}" 2>/dev/null; then
         exec >> "\${LAUNCH_LOG}" 2>&1
         printf '\n[%s] 启动器开始\n' "\$(date '+%F %T')"
         printf 'APP_DIR=%s\n' "\${APP_DIR}"
@@ -88,6 +124,15 @@ if [[ "\${HCLY_LAUNCH_LOG:-1}" == "1" ]]; then
         printf 'DISPLAY=%s\n' "\${DISPLAY:-}"
         printf 'XDG_SESSION_TYPE=%s\n' "\${XDG_SESSION_TYPE:-}"
         printf 'QT_QPA_PLATFORM(before)=%s\n' "\${QT_QPA_PLATFORM:-}"
+    else
+        FALLBACK_LOG_DIR="\${HOME:-/tmp}/.hcly_behavior_desktop/logs"
+        FALLBACK_LAUNCH_LOG="\${FALLBACK_LOG_DIR}/launcher.log"
+        if mkdir -p "\${FALLBACK_LOG_DIR}" 2>/dev/null && touch "\${FALLBACK_LAUNCH_LOG}" 2>/dev/null; then
+            exec >> "\${FALLBACK_LAUNCH_LOG}" 2>&1
+            printf '\n[%s] 启动器开始，应用目录日志不可写，使用备用日志\n' "\$(date '+%F %T')"
+            printf 'APP_DIR=%s\n' "\${APP_DIR}"
+            printf 'LOG_DIR=%s\n' "\${LOG_DIR}"
+        fi
     fi
 fi
 
@@ -394,7 +439,7 @@ prune_qt_bundle() {
 
     local controls_dir="${APP_BUNDLE}/_internal/PySide6/Qt/qml/QtQuick/Controls"
     if [[ -d "${controls_dir}" ]]; then
-        for style_name in Fusion Imagine Material Universal macOS Windows; do
+        for style_name in FluentWinUI3 Fusion Imagine Material Universal macOS Windows designer; do
             remove_if_exists "${controls_dir}/${style_name}"
         done
     fi
@@ -409,6 +454,67 @@ prune_qt_bundle() {
             ! -name 'QtQml' \
             ! -name 'QtQuick' \
             -exec rm -rf {} +
+    fi
+
+    for qml_path in \
+        "${qt_qml_dir}/Qt/labs" \
+        "${qt_qml_dir}/QtQml/StateMachine" \
+        "${qt_qml_dir}/QtQml/WorkerScript" \
+        "${qt_qml_dir}/QtQml/XmlListModel" \
+        "${qt_qml_dir}/QtQuick/Dialogs" \
+        "${qt_qml_dir}/QtQuick/Effects" \
+        "${qt_qml_dir}/QtQuick/LocalStorage" \
+        "${qt_qml_dir}/QtQuick/Particles" \
+        "${qt_qml_dir}/QtQuick/Pdf" \
+        "${qt_qml_dir}/QtQuick/Scene2D" \
+        "${qt_qml_dir}/QtQuick/Scene3D" \
+        "${qt_qml_dir}/QtQuick/Shapes" \
+        "${qt_qml_dir}/QtQuick/Timeline" \
+        "${qt_qml_dir}/QtQuick/VectorImage" \
+        "${qt_qml_dir}/QtQuick/VirtualKeyboard" \
+        "${qt_qml_dir}/QtQuick/tooling"; do
+        remove_if_exists "${qml_path}"
+    done
+
+    local qt_lib_dir="${APP_BUNDLE}/_internal/PySide6/Qt/lib"
+    if [[ -d "${qt_lib_dir}" ]]; then
+        find "${qt_lib_dir}" -maxdepth 1 -type f \( \
+            -name 'libQt63D*.so*' \
+            -o -name 'libQt6Charts*.so*' \
+            -o -name 'libQt6DataVisualization*.so*' \
+            -o -name 'libQt6Egl*.so*' \
+            -o -name 'libQt6Graphs*.so*' \
+            -o -name 'libQt6Labs*.so*' \
+            -o -name 'libQt6Location*.so*' \
+            -o -name 'libQt6Multimedia*.so*' \
+            -o -name 'libQt6Pdf*.so*' \
+            -o -name 'libQt6Positioning*.so*' \
+            -o -name 'libQt6Quick3D*.so*' \
+            -o -name 'libQt6QuickControls2Fluent*.so*' \
+            -o -name 'libQt6QuickControls2Fusion*.so*' \
+            -o -name 'libQt6QuickControls2Imagine*.so*' \
+            -o -name 'libQt6QuickControls2Material*.so*' \
+            -o -name 'libQt6QuickControls2Universal*.so*' \
+            -o -name 'libQt6QuickDialogs2*.so*' \
+            -o -name 'libQt6QuickEffects*.so*' \
+            -o -name 'libQt6QuickParticles*.so*' \
+            -o -name 'libQt6QuickShapes*.so*' \
+            -o -name 'libQt6QuickTest*.so*' \
+            -o -name 'libQt6QuickTimeline*.so*' \
+            -o -name 'libQt6QuickVectorImage*.so*' \
+            -o -name 'libQt6RemoteObjects*.so*' \
+            -o -name 'libQt6Scxml*.so*' \
+            -o -name 'libQt6Sensors*.so*' \
+            -o -name 'libQt6SpatialAudio*.so*' \
+            -o -name 'libQt6StateMachine*.so*' \
+            -o -name 'libQt6Sql*.so*' \
+            -o -name 'libQt6Test*.so*' \
+            -o -name 'libQt6TextToSpeech*.so*' \
+            -o -name 'libQt6VirtualKeyboard*.so*' \
+            -o -name 'libQt6Wayland*.so*' \
+            -o -name 'libQt6Web*.so*' \
+            -o -name 'libQt6WlShellIntegration*.so*' \
+        \) -delete
     fi
 
     local python_lib_dir="${APP_BUNDLE}/_internal"
@@ -450,6 +556,10 @@ make_deb_package() {
     install -d "${deb_root}/usr/share/pixmaps"
 
     cp -a "${APP_BUNDLE}/." "${package_root}/"
+    install -d -m 1777 "${package_root}/logs"
+    touch "${package_root}/logs/launcher.log"
+    chmod 0666 "${package_root}/logs/launcher.log"
+    chmod 0666 "${package_root}/config.json"
     install -m 0644 "${PROJECT_ROOT}/resources/icons/app_icon.png" "${deb_root}/usr/share/pixmaps/${APP_ID}.png"
 
     cat > "${deb_root}/usr/bin/${APP_ID}" <<EOF
@@ -700,6 +810,9 @@ Description: ${APP_DISPLAY_NAME} 桌面客户端
 EOF
 
     find "${deb_root}" -type d -exec chmod 0755 {} +
+    chmod 1777 "${package_root}/logs"
+    chmod 0666 "${package_root}/logs/launcher.log"
+    chmod 0666 "${package_root}/config.json"
     chmod 0755 "${deb_root}/DEBIAN/postinst" "${deb_root}/DEBIAN/postrm"
     dpkg-deb --root-owner-group -Zxz -z9 --build "${deb_root}" "${deb_path}"
     find "${DIST_ROOT}" -mindepth 1 -maxdepth 1 ! -name "$(basename "${deb_path}")" -exec rm -rf {} +
@@ -710,6 +823,7 @@ EOF
 main() {
     prepare_dirs
     build_app
+    write_default_config
     write_launcher
     prune_qt_bundle
     bundle_system_libs

@@ -31,6 +31,8 @@ sudo dpkg -r hcly-behavior-desktop
 
 这个 deb 默认不声明外部 apt 依赖，包内会携带 Python、PySide6、QML、图片资源和 glibc 兼容层；目标机仍需要 Linux 图形桌面、兼容的 Qt/X11 系统库、内核以及显示驱动。安装时会给执行 `sudo dpkg -i` 的桌面用户创建桌面快捷方式，`sudo dpkg -r` 卸载时会删除这个快捷方式。
 
+启动器日志默认写入 `/opt/hcly-behavior-desktop/logs/launcher.log`，只有应用目录日志不可写时才回退到用户目录 `~/.hcly_behavior_desktop/logs/launcher.log`。
+
 ## 可选参数
 
 ```bash
