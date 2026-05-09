@@ -137,7 +137,7 @@ if [[ "\${HCLY_LAUNCH_LOG:-1}" == "1" ]]; then
 fi
 
 export QT_QUICK_CONTROLS_STYLE="\${QT_QUICK_CONTROLS_STYLE:-Basic}"
-export QT_QPA_PLATFORM="\${QT_QPA_PLATFORM:-xcb}"
+export QT_QPA_PLATFORM="\${HCLY_QT_QPA_PLATFORM:-xcb}"
 export QT_XCB_GL_INTEGRATION="\${QT_XCB_GL_INTEGRATION:-none}"
 export QT_PLUGIN_PATH="\${APP_DIR}/_internal/PySide6/Qt/plugins\${QT_PLUGIN_PATH:+:\${QT_PLUGIN_PATH}}"
 export QT_QPA_PLATFORM_PLUGIN_PATH="\${APP_DIR}/_internal/PySide6/Qt/plugins/platforms"
@@ -181,6 +181,7 @@ if [[ "\${HCLY_DEBUG_LAUNCH:-0}" == "1" ]]; then
     printf 'SYSTEM_GLIBC_VERSION=%s\n' "\${SYSTEM_GLIBC_VERSION:-unknown}" >&2
     printf 'USE_BUNDLED_GLIBC=%s\n' "\${USE_BUNDLED_GLIBC}" >&2
     printf 'QT_QPA_PLATFORM=%s\n' "\${QT_QPA_PLATFORM}" >&2
+    printf 'HCLY_QT_QPA_PLATFORM=%s\n' "\${HCLY_QT_QPA_PLATFORM:-}" >&2
     printf 'QT_XCB_GL_INTEGRATION=%s\n' "\${QT_XCB_GL_INTEGRATION}" >&2
     printf 'HCLY_SOFTWARE_RENDERING=%s\n' "\${HCLY_SOFTWARE_RENDERING:-1}" >&2
 fi
@@ -566,7 +567,7 @@ make_deb_package() {
 
     cat > "${deb_root}/usr/bin/${APP_ID}" <<EOF
 #!/usr/bin/env bash
-export QT_QPA_PLATFORM="\${QT_QPA_PLATFORM:-xcb}"
+export QT_QPA_PLATFORM="\${HCLY_QT_QPA_PLATFORM:-xcb}"
 export QT_XCB_GL_INTEGRATION="\${QT_XCB_GL_INTEGRATION:-none}"
 exec /opt/${APP_ID}/${APP_ID} "\$@"
 EOF
@@ -578,10 +579,13 @@ Type=Application
 Version=1.0
 Name=${APP_DISPLAY_NAME}
 Exec=/usr/bin/${APP_ID}
+TryExec=/usr/bin/${APP_ID}
+Path=/opt/${APP_ID}
 Icon=${APP_ID}
 Terminal=false
 Categories=Utility;
 StartupNotify=true
+NoDisplay=false
 X-GNOME-Autostart-enabled=false
 EOF
 
@@ -591,6 +595,11 @@ set -Eeuo pipefail
 
 APP_ID="${APP_ID}"
 APP_DISPLAY_NAME="${APP_DISPLAY_NAME}"
+POSTINST_LOG="/var/log/${APP_ID}-postinst.log"
+
+log_postinst() {
+    printf '[%s] %s\n' "\$(date '+%F %T')" "\$*" >> "\${POSTINST_LOG}" 2>/dev/null || true
+}
 
 find_target_user() {
     if [[ -n "\${SUDO_USER:-}" && "\${SUDO_USER}" != "root" ]]; then
@@ -609,6 +618,32 @@ find_target_user() {
         printf '%s\n' "\${login_user}"
         return 0
     fi
+
+    local runtime_dir
+    local runtime_uid
+    local runtime_user
+    for runtime_dir in /run/user/[0-9]*; do
+        [[ -d "\${runtime_dir}" ]] || continue
+        runtime_uid="\${runtime_dir##*/}"
+        [[ "\${runtime_uid}" =~ ^[0-9]+$ ]] || continue
+        [[ "\${runtime_uid}" -ge 1000 && "\${runtime_uid}" -lt 60000 ]] || continue
+        runtime_user="\$(getent passwd "\${runtime_uid}" | cut -d: -f1)"
+        if [[ -n "\${runtime_user}" && "\${runtime_user}" != "root" ]]; then
+            printf '%s\n' "\${runtime_user}"
+            return 0
+        fi
+    done
+
+    local user
+    local uid
+    local home_dir
+    while IFS=: read -r user _ uid _ _ home_dir _; do
+        [[ "\${uid}" =~ ^[0-9]+$ ]] || continue
+        [[ "\${uid}" -ge 1000 && "\${uid}" -lt 60000 ]] || continue
+        [[ -d "\${home_dir}" ]] || continue
+        printf '%s\n' "\${user}"
+        return 0
+    done < /etc/passwd
 
     return 1
 }
@@ -651,14 +686,77 @@ desktop_dir_for_user() {
     printf '%s\n' "\${home_dir}/Desktop"
 }
 
+trust_desktop_file() {
+    local target_user="\$1"
+    local desktop_file="\$2"
+    local target_home
+    target_home="\$(user_home "\${target_user}")"
+    [[ -n "\${target_home}" ]] || return 0
+
+    if ! command -v gio >/dev/null 2>&1; then
+        log_postinst "gio 不存在，跳过桌面快捷方式信任标记: \${desktop_file}"
+        return 0
+    fi
+
+    if ! command -v runuser >/dev/null 2>&1; then
+        if gio set "\${desktop_file}" metadata::trusted true >/dev/null 2>&1; then
+            log_postinst "已用当前用户标记桌面快捷方式可信: \${desktop_file}"
+        else
+            log_postinst "当前用户标记桌面快捷方式可信失败: \${desktop_file}"
+        fi
+        return 0
+    fi
+
+    local target_uid
+    local runtime_dir
+    local session_bus
+    target_uid="\$(id -u "\${target_user}" 2>/dev/null || true)"
+    runtime_dir="/run/user/\${target_uid}"
+    session_bus="unix:path=\${runtime_dir}/bus"
+
+    if [[ -n "\${target_uid}" && -S "\${runtime_dir}/bus" ]]; then
+        if runuser -u "\${target_user}" -- env \
+            HOME="\${target_home}" \
+            XDG_RUNTIME_DIR="\${runtime_dir}" \
+            DBUS_SESSION_BUS_ADDRESS="\${session_bus}" \
+            gio set "\${desktop_file}" metadata::trusted true >/dev/null 2>&1; then
+            log_postinst "已通过用户会话标记桌面快捷方式可信: \${desktop_file}"
+            return 0
+        fi
+        log_postinst "通过用户会话标记桌面快捷方式可信失败: \${desktop_file}"
+    fi
+
+    if runuser -u "\${target_user}" -- env HOME="\${target_home}" \
+        gio set "\${desktop_file}" metadata::trusted true >/dev/null 2>&1; then
+        log_postinst "已通过用户环境标记桌面快捷方式可信: \${desktop_file}"
+        return 0
+    fi
+
+    if command -v dbus-run-session >/dev/null 2>&1; then
+        if runuser -u "\${target_user}" -- env HOME="\${target_home}" \
+            dbus-run-session -- gio set "\${desktop_file}" metadata::trusted true >/dev/null 2>&1; then
+            log_postinst "已通过临时 DBus 会话标记桌面快捷方式可信: \${desktop_file}"
+            return 0
+        fi
+    fi
+
+    log_postinst "桌面快捷方式可信标记失败，但已设置可执行权限: \${desktop_file}"
+}
+
 install_desktop_icon() {
     local target_user
     target_user="\$(find_target_user || true)"
-    [[ -n "\${target_user}" ]] || return 0
+    if [[ -z "\${target_user}" ]]; then
+        log_postinst "未识别到桌面用户，跳过桌面快捷方式创建"
+        return 0
+    fi
 
     local desktop_dir
     desktop_dir="\$(desktop_dir_for_user "\${target_user}" || true)"
-    [[ -n "\${desktop_dir}" ]] || return 0
+    if [[ -z "\${desktop_dir}" ]]; then
+        log_postinst "未识别到 \${target_user} 的桌面目录，跳过桌面快捷方式创建"
+        return 0
+    fi
 
     local target_group
     target_group="\$(id -gn "\${target_user}" 2>/dev/null || printf '%s' "\${target_user}")"
@@ -668,25 +766,8 @@ install_desktop_icon() {
     cp "/usr/share/applications/\${APP_ID}.desktop" "\${desktop_file}"
     chmod 0755 "\${desktop_file}"
     chown "\${target_user}:\${target_group}" "\${desktop_file}"
-
-    if command -v runuser >/dev/null 2>&1 && command -v gio >/dev/null 2>&1; then
-        local target_uid
-        local target_home
-        local runtime_dir
-        local session_bus
-        target_uid="\$(id -u "\${target_user}" 2>/dev/null || true)"
-        target_home="\$(user_home "\${target_user}")"
-        runtime_dir="/run/user/\${target_uid}"
-        session_bus="unix:path=\${runtime_dir}/bus"
-
-        if [[ -n "\${target_uid}" && -S "\${runtime_dir}/bus" ]]; then
-            HOME="\${target_home}" XDG_RUNTIME_DIR="\${runtime_dir}" DBUS_SESSION_BUS_ADDRESS="\${session_bus}" \
-                runuser -u "\${target_user}" -- gio set "\${desktop_file}" metadata::trusted true >/dev/null 2>&1 || true
-        else
-            HOME="\${target_home}" runuser -u "\${target_user}" -- \
-                gio set "\${desktop_file}" metadata::trusted true >/dev/null 2>&1 || true
-        fi
-    fi
+    trust_desktop_file "\${target_user}" "\${desktop_file}"
+    log_postinst "桌面快捷方式已创建: user=\${target_user} file=\${desktop_file}"
 
     if command -v update-desktop-database >/dev/null 2>&1; then
         update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
