@@ -68,3 +68,60 @@ HCLY_SOFTWARE_RENDERING=0 /usr/bin/hcly-behavior-desktop
 - `HCLY_SOFTWARE_RENDERING=0`：关闭默认软件渲染，适合排查 Qt 图形后端问题。
 
 Docker 镜像构建阶段需要外网下载 apt 和 pip 包；目标 Linux 机器安装 deb 时只用 `dpkg`，不需要 `apt` 下载依赖。
+
+## Git 仓库推送说明
+
+本项目配置了两个远程仓库：
+
+- **origin**（Gitee）：`https://gitee.com/gzhcly_1/hcly-behavior-desktop.git`
+- **github**（GitHub）：`https://github.com/zengchao0928/HclyBehaviorDesktop.git`
+
+### 推送到 Gitee（默认）
+
+```bash
+git push origin main
+```
+
+### 推送到 GitHub
+
+```bash
+git push github main
+```
+
+### 同时推送到两个仓库
+
+```bash
+git push origin main && git push github main
+```
+
+或者配置 `origin` 同时推送到两个地址：
+
+```bash
+# 添加 GitHub 作为 origin 的第二个推送地址
+git remote set-url --add --push origin https://github.com/zengchao0928/HclyBehaviorDesktop.git
+git remote set-url --add --push origin https://gitee.com/gzhcly_1/hcly-behavior-desktop.git
+
+# 之后执行 git push 会同时推送到两个仓库
+git push origin main
+```
+
+### 查看当前远程仓库配置
+
+```bash
+git remote -v
+```
+
+### 切换默认推送仓库
+
+如果想让 GitHub 成为默认推送仓库：
+
+```bash
+# 重命名当前 origin 为 gitee
+git remote rename origin gitee
+
+# 重命名 github 为 origin
+git remote rename github origin
+
+# 现在 git push 默认推送到 GitHub
+git push origin main
+```
