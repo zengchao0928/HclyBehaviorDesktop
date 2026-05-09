@@ -12,8 +12,11 @@ from PySide6.QtCore import QObject, Property, QTimer, Signal, Slot
 
 from src.api.behavior_api import BehaviorApi
 from src.config.settings import API_BASE_URL
-from src.core.image_cache import ImageCache
+from src.core.image_cache import ImageCache, tinted_cache_url
 from src.utils.exception_handler import fatal_slot
+
+
+_SELECTED_CONTENT_COLOR = "#22FFAE"
 
 
 class BehaviorController(QObject):
@@ -119,7 +122,11 @@ class BehaviorController(QObject):
     @Property(str, notify=dataChanged)
     def selectedContentIconUrl(self):
         """当前选中的行为图标地址。"""
-        return self._selected_content.get("localIconUrl") or self._selected_content.get("iconUrl", "")
+        return (
+            self._selected_content.get("selectedLocalIconUrl")
+            or self._selected_content.get("localIconUrl")
+            or self._selected_content.get("iconUrl", "")
+        )
 
     @Property(str, notify=dataChanged)
     def selectedLienCodeText(self):
@@ -200,6 +207,7 @@ class BehaviorController(QObject):
             "icon": str(item.get("icon") or ""),
             "iconUrl": self.absoluteUrl(item.get("icon") or ""),
             "localIconUrl": "",
+            "selectedLocalIconUrl": "",
             "checkedIcon": str(item.get("checkedIcon") or ""),
             "createTime": str(item.get("createTime") or ""),
             "createBy": str(item.get("createBy") or ""),
@@ -254,6 +262,14 @@ class BehaviorController(QObject):
     def _cache_apply_images(self, kind, items):
         jobs = [(kind, item.get("id", ""), item.get("iconUrl", "")) for item in items]
         self._image_cache.request_images(jobs)
+
+    def _ensure_selected_icon(self, content):
+        """为行为项补齐本地选中态图标。"""
+        if not isinstance(content, dict):
+            return
+        if content.get("selectedLocalIconUrl") or not content.get("localIconUrl"):
+            return
+        content["selectedLocalIconUrl"] = tinted_cache_url(content.get("localIconUrl", ""), _SELECTED_CONTENT_COLOR)
 
     def _selected_lien_id(self) -> str:
         if not self._liens:
@@ -333,7 +349,9 @@ class BehaviorController(QObject):
         """选择行为项。"""
         if not isinstance(content, dict):
             return
-        self._selected_content = dict(content)
+        selected_content = dict(content)
+        self._ensure_selected_icon(selected_content)
+        self._selected_content = selected_content
         self._remark = self._selected_content.get("name", "")
         self.dataChanged.emit()
 
@@ -344,6 +362,7 @@ class BehaviorController(QObject):
         content = self._find_item(self.currentContents, content_id)
         if not content:
             return
+        self._ensure_selected_icon(content)
         self._selected_content = dict(content)
         self._remark = self._selected_content.get("name", "")
         self.dataChanged.emit()
@@ -523,6 +542,7 @@ class BehaviorController(QObject):
                 for content in action.get("content", []):
                     if content.get("id") == item_id:
                         content["localIconUrl"] = local_url
+                        self._ensure_selected_icon(content)
                         if self._selected_content.get("id") == item_id:
                             self._selected_content = dict(content)
                         changed = True

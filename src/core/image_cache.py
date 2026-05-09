@@ -11,7 +11,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
-from PySide6.QtCore import QObject, QThread, QUrl, Signal
+from PySide6.QtCore import QObject, QThread, Qt, QUrl, Signal
+from PySide6.QtGui import QColor, QImage, QPainter
 
 from src.config.settings import API_CONNECT_TIMEOUT, API_TIMEOUT
 from src.utils.storage import StorageManager
@@ -29,6 +30,48 @@ def _cache_path_for_url(url: str) -> Path:
         suffix = ".img"
     digest = hashlib.sha256(url.encode("utf-8")).hexdigest()
     return _CACHE_DIR / f"{digest}{suffix}"
+
+
+def tinted_cache_url(local_url: str, color_name: str) -> str:
+    """把已缓存的本地图片按指定颜色生成一张 PNG 选中态图片。"""
+    source_url = str(local_url or "")
+    color = QColor(str(color_name or ""))
+    if not source_url or not color.isValid():
+        return ""
+
+    source_path_text = QUrl(source_url).toLocalFile() if source_url.startswith("file:") else source_url
+    source_path = Path(source_path_text)
+    if not source_path.exists() or not source_path.is_file():
+        return ""
+
+    try:
+        stat = source_path.stat()
+        digest_source = f"{source_path.resolve()}:{stat.st_mtime_ns}:{stat.st_size}:{color.name(QColor.HexArgb)}"
+        digest = hashlib.sha256(digest_source.encode("utf-8")).hexdigest()
+        target_path = _CACHE_DIR / "tinted" / f"{digest}.png"
+        if target_path.exists() and target_path.stat().st_size > 0:
+            return QUrl.fromLocalFile(str(target_path)).toString()
+
+        source_image = QImage(str(source_path))
+        if source_image.isNull():
+            return ""
+
+        result = QImage(source_image.size(), QImage.Format_ARGB32_Premultiplied)
+        result.fill(Qt.transparent)
+
+        painter = QPainter(result)
+        painter.drawImage(0, 0, source_image)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+        painter.fillRect(result.rect(), color)
+        painter.end()
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        if not result.save(str(target_path), "PNG"):
+            return ""
+        return QUrl.fromLocalFile(str(target_path)).toString()
+    except Exception as exc:
+        _logger.warning("图片染色失败: url=%s color=%s error=%s", source_url, color_name, exc)
+        return ""
 
 
 class ImageDownloadWorker(QThread):

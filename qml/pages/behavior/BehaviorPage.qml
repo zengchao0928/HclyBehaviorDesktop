@@ -23,6 +23,9 @@ Item {
     readonly property real centerPanelWidth: Math.max(360, width * 0.3)
     readonly property real leftPanelWidth: Math.max(0, bodyWidth - centerPanelWidth - sidePanelWidth - panelGap * 2)
     readonly property color panelColor: "#4DFFFFFF"
+    readonly property color selectedContentColor: "#22FFAE"
+    readonly property int selectedRowHeight: sp(210)
+    readonly property int selectedCardHeight: sp(190)
 
     function sp(value) {
         return Math.round(value * uiScale)
@@ -307,18 +310,19 @@ Item {
 
                     Row {
                         width: parent.width
-                        height: behaviorPage.sp(190)
+                        height: behaviorPage.selectedRowHeight
                         spacing: behaviorPage.sp(20)
 
                         Rectangle {
                             width: behaviorPage.sp(300)
-                            height: behaviorPage.sp(190)
+                            height: behaviorPage.selectedCardHeight
+                            anchors.verticalCenter: parent.verticalCenter
                             radius: behaviorPage.sp(15)
                             color: behaviorPage.panelColor
 
                             Row {
                                 anchors.centerIn: parent
-                                spacing: 8
+                                spacing: behaviorPage.sp(12)
 
                                 Image {
                                     id: selectedIconImage
@@ -340,7 +344,7 @@ Item {
 
                                 Text {
                                     text: controller ? controller.selectedContentName : ""
-                                    color: "#22FFAE"
+                                    color: behaviorPage.selectedContentColor
                                     font.pixelSize: behaviorPage.sp(36)
                                 }
                             }
@@ -348,7 +352,8 @@ Item {
 
                         Rectangle {
                             width: parent.width - behaviorPage.sp(320)
-                            height: behaviorPage.sp(190)
+                            height: behaviorPage.selectedCardHeight
+                            anchors.verticalCenter: parent.verticalCenter
                             radius: behaviorPage.sp(15)
                             color: "#26D0D3D7"
                             border.color: "#8FFFFFFF"
@@ -406,7 +411,7 @@ Item {
 
                     Column {
                         width: parent.width
-                        height: parent.height - behaviorPage.sp(15 + 34 + 180 + 190 + 15 * 4)
+                        height: parent.height - behaviorPage.sp(15 + 34 + 180 + 15 * 4) - behaviorPage.selectedRowHeight
                         spacing: behaviorPage.sp(20)
 
                         Item {
@@ -469,9 +474,14 @@ Item {
                             clip: true
                             model: controller ? controller.currentContents : []
 
-                            delegate: Item {
+                            delegate: MouseArea {
                                 width: actionGrid.cellWidth
                                 height: actionGrid.cellHeight
+                                acceptedButtons: Qt.LeftButton
+                                cursorShape: Qt.PointingHandCursor
+                                hoverEnabled: true
+                                preventStealing: false
+                                onClicked: if (controller) controller.selectBehaviourById(modelData.id)
 
                                 readonly property bool selected: controller && controller.selectedContent && controller.selectedContent.id === modelData.id
 
@@ -488,7 +498,7 @@ Item {
                                         anchors.horizontalCenter: parent.horizontalCenter
                                         radius: behaviorPage.sp(10)
                                         color: selected ? "#153BA9" : "#33153BA9"
-                                        border.color: selected ? "#22FFAE" : "#4D22FFAE"
+                                        border.color: selected ? behaviorPage.selectedContentColor : "#4D22FFAE"
                                         border.width: 1
 
                                         Image {
@@ -496,7 +506,7 @@ Item {
                                             anchors.centerIn: parent
                                             width: behaviorPage.sp(100)
                                             height: behaviorPage.sp(80)
-                                            source: modelData.localIconUrl || modelData.iconUrl
+                                            source: selected ? (modelData.selectedLocalIconUrl || modelData.localIconUrl || modelData.iconUrl) : (modelData.localIconUrl || modelData.iconUrl)
                                             fillMode: Image.PreserveAspectFit
                                             asynchronous: true
                                             visible: status !== Image.Error && source !== ""
@@ -516,7 +526,7 @@ Item {
                                         width: parent.width
                                         height: behaviorPage.sp(32)
                                         text: modelData.name
-                                        color: selected ? "#22FFAE" : "#FFFFFF"
+                                        color: selected ? behaviorPage.selectedContentColor : "#FFFFFF"
                                         font.pixelSize: behaviorPage.sp(22)
                                         horizontalAlignment: Text.AlignHCenter
                                         verticalAlignment: Text.AlignVCenter
@@ -524,13 +534,6 @@ Item {
                                     }
                                 }
 
-                                TapHandler {
-                                    acceptedButtons: Qt.LeftButton
-                                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.TouchScreen
-                                    cursorShape: Qt.PointingHandCursor
-                                    gesturePolicy: TapHandler.ReleaseWithinBounds
-                                    onTapped: if (controller) controller.selectBehaviourById(modelData.id)
-                                }
                             }
                         }
                     }
