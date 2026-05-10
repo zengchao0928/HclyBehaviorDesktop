@@ -405,11 +405,14 @@ Item {
                             color: behaviorPage.panelColor
 
                             Row {
+                                id: selectedContentSummary
                                 anchors.centerIn: parent
+                                height: behaviorPage.sp(70)
                                 spacing: behaviorPage.sp(12)
 
                                 Image {
                                     id: selectedIconImage
+                                    anchors.verticalCenter: parent.verticalCenter
                                     width: behaviorPage.sp(70)
                                     height: behaviorPage.sp(70)
                                     source: controller ? controller.selectedContentIconUrl : ""
@@ -419,6 +422,7 @@ Item {
                                 }
 
                                 Image {
+                                    anchors.verticalCenter: parent.verticalCenter
                                     width: behaviorPage.sp(70)
                                     height: behaviorPage.sp(70)
                                     source: Root.ImageResources.iconBehaviorCfSelect
@@ -427,9 +431,11 @@ Item {
                                 }
 
                                 Text {
+                                    height: selectedContentSummary.height
                                     text: controller ? controller.selectedContentName : ""
                                     color: behaviorPage.selectedContentColor
                                     font.pixelSize: behaviorPage.sp(36)
+                                    verticalAlignment: Text.AlignVCenter
                                 }
                             }
                         }
@@ -728,47 +734,73 @@ Item {
                                 pullRefreshArmed = false
                             }
 
-                            delegate: Row {
+                            delegate: Item {
                                 width: recordListView.width
-                                height: behaviorPage.sp(60)
-                                spacing: behaviorPage.sp(14)
+                                height: Math.max(behaviorPage.sp(60), recordContentText.implicitHeight + behaviorPage.sp(16))
 
-                                Column {
+                                Item {
+                                    id: recordTimeline
                                     width: behaviorPage.sp(15)
-                                    height: parent.height
+                                    anchors.left: parent.left
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
 
                                     Rectangle {
                                         width: behaviorPage.sp(4)
                                         height: behaviorPage.sp(7)
                                         anchors.horizontalCenter: parent.horizontalCenter
+                                        anchors.top: parent.top
                                         color: "#FFFFFF"
                                     }
 
                                     Rectangle {
+                                        id: recordDot
                                         width: behaviorPage.sp(15)
                                         height: behaviorPage.sp(15)
                                         radius: 8
                                         anchors.horizontalCenter: parent.horizontalCenter
+                                        anchors.top: parent.top
+                                        anchors.topMargin: behaviorPage.sp(7)
                                         color: "#FFFFFF"
                                     }
 
                                     Rectangle {
                                         width: behaviorPage.sp(4)
-                                        height: parent.height - behaviorPage.sp(22)
                                         anchors.horizontalCenter: parent.horizontalCenter
+                                        anchors.top: recordDot.bottom
+                                        anchors.bottom: parent.bottom
                                         color: "#FFFFFF"
                                     }
                                 }
 
                                 Text {
-                                    width: parent.width - behaviorPage.sp(35)
-                                    text: modelData.timeText + " " + modelData.content
+                                    id: recordTimeText
+                                    width: behaviorPage.sp(102)
+                                    anchors.left: recordTimeline.right
+                                    anchors.leftMargin: behaviorPage.sp(14)
+                                    anchors.top: parent.top
+                                    text: modelData.timeText || ""
+                                    color: "#F2FFFFFF"
+                                    font.pixelSize: behaviorPage.sp(24)
+                                    lineHeight: 1.16
+                                    lineHeightMode: Text.ProportionalHeight
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    id: recordContentText
+                                    anchors.left: recordTimeText.right
+                                    anchors.leftMargin: behaviorPage.sp(8)
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    text: modelData.content || ""
                                     color: "#FFFFFF"
                                     font.pixelSize: behaviorPage.sp(24)
                                     wrapMode: Text.WordWrap
-                                    maximumLineCount: 2
+                                    maximumLineCount: 3
+                                    lineHeight: 1.16
+                                    lineHeightMode: Text.ProportionalHeight
                                     elide: Text.ElideRight
-                                    verticalAlignment: Text.AlignVCenter
                                 }
                             }
 

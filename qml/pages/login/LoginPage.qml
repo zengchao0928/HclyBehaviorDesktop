@@ -306,6 +306,9 @@ Item {
                                         id: usernameInput
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: Math.max(120, parent.width - 18 - usernameClearButton.width - 20)
+                                        activeFocusOnTab: true
+                                        KeyNavigation.priority: KeyNavigation.BeforeItem
+                                        KeyNavigation.tab: passwordInput
                                         font.pixelSize: 14
                                         color: "#333333"
                                         text: loginController ? loginController.suggestedUsername : ""
@@ -359,6 +362,9 @@ Item {
                                         id: passwordInput
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: Math.max(120, parent.width - 18 - passwordClearButton.width - passwordVisibilityButton.width - 30)
+                                        activeFocusOnTab: true
+                                        KeyNavigation.priority: KeyNavigation.BeforeItem
+                                        KeyNavigation.backtab: usernameInput
                                         font.pixelSize: 14
                                         color: "#333333"
                                         echoMode: loginPage.passwordVisible ? TextInput.Normal : TextInput.Password

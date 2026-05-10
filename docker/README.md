@@ -33,6 +33,26 @@ sudo dpkg -r hcly-behavior-desktop
 
 启动器日志默认写入 `/opt/hcly-behavior-desktop/logs/launcher.log`，只有应用目录日志不可写时才回退到用户目录 `~/.hcly_behavior_desktop/logs/launcher.log`。
 
+## 接口地址配置
+
+项目的接口基础地址由 `src/config/settings.py` 中的 `API_BASE_URL` 提供。启动时会先读取运行目录下的 `config.json`，取其中的 `baseUrl` 字段；如果文件不存在、格式错误或 `baseUrl` 为空，则回退到 `DEFAULT_API_BASE_URL`，当前默认值为 `http://10.1.100.126:8085/`。
+
+Linux deb 安装后，运行目录固定在 `/opt/hcly-behavior-desktop`，所以目标机上修改接口地址时编辑：
+
+```bash
+sudo nano /opt/hcly-behavior-desktop/config.json
+```
+
+文件内容示例：
+
+```json
+{
+  "baseUrl": "http://10.1.100.126:8085/"
+}
+```
+
+修改后重新启动应用生效。Docker 打包脚本会在构建时把默认 `config.json` 写入安装包，并在 deb 中放到 `/opt/hcly-behavior-desktop/config.json`；该文件会设置为可写，便于现场部署时直接调整。
+
 ## 可选参数
 
 ```bash
