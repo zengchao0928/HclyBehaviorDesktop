@@ -24,8 +24,8 @@ class LoginController(QObject):
         self._token = ""
         self._username = ""
         self._login_pending = False
-        self._suggested_username = "kljw"
-        self._suggested_password = "123456"
+        self._suggested_username = ""
+        self._suggested_password = ""
         self._login_api = LoginApi()
         self._login_api.requestFinished.connect(self._on_login_response)
         self._storage = StorageManager()

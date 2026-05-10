@@ -26,6 +26,7 @@ class BehaviorController(QObject):
     timeChanged = Signal()
     loadingChanged = Signal(bool)
     toastRequested = Signal(str, str)
+    recordRefreshFinished = Signal(bool, str)
 
     def __init__(self):
         super().__init__()
@@ -281,6 +282,7 @@ class BehaviorController(QObject):
         if not lien_id:
             self._records = []
             self._page = 1
+            self.recordRefreshFinished.emit(False, "暂无对象")
             self._set_loading(False)
             self.dataChanged.emit()
             return
@@ -457,6 +459,8 @@ class BehaviorController(QObject):
     def _on_request_finished(self, request_name, success, response):
         data = self._parse_response(success, response)
         if data is None:
+            if request_name == "records":
+                self.recordRefreshFinished.emit(False, "刷新失败")
             self._set_loading(False)
             return
 
@@ -485,10 +489,13 @@ class BehaviorController(QObject):
         if request_name == "records":
             source = data if isinstance(data, list) else []
             records = [self._normalize_record(item) for item in source]
+            is_first_page = self._page <= 1
             if self._page <= 1:
                 self._records = records
             else:
                 self._records.extend(records)
+            if is_first_page:
+                self.recordRefreshFinished.emit(True, "刷新成功")
             self._set_loading(False)
             self.dataChanged.emit()
             return

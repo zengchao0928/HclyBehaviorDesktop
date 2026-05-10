@@ -11,13 +11,18 @@ Item {
     clip: true
 
     property var controller: typeof behaviorController !== "undefined" ? behaviorController : null
+    property bool inlineRecordRefreshActive: false
+    property string recordRefreshState: "idle"
+    property string recordRefreshResultText: ""
 
     readonly property real uiScale: Math.min(1, Math.max(0.58, width / 2048))
     readonly property real pageLeftPadding: sp(15)
     readonly property real panelGap: sp(15)
     readonly property real sidePanelWidth: sp(90)
-    readonly property real headerHeight: sp(52)
+    readonly property real headerHeight: sp(58)
     readonly property real toolbarIconSize: sp(44)
+    readonly property real topActionButtonSize: sp(58)
+    readonly property real topActionIconSize: sp(48)
     readonly property real bodyWidth: Math.max(0, width - pageLeftPadding)
     readonly property real bodyHeight: Math.min(height * 0.9, height - headerHeight - sp(32))
     readonly property real centerPanelWidth: Math.max(360, width * 0.3)
@@ -31,6 +36,44 @@ Item {
         return Math.round(value * uiScale)
     }
 
+    function recordRefreshTitle() {
+        if (recordRefreshState === "pull") {
+            return "下拉刷新"
+        }
+        if (recordRefreshState === "release") {
+            return "松开刷新"
+        }
+        if (recordRefreshState === "refreshing") {
+            return "正在刷新"
+        }
+        if (recordRefreshState === "success") {
+            return recordRefreshResultText || "刷新成功"
+        }
+        if (recordRefreshState === "error") {
+            return recordRefreshResultText || "刷新失败"
+        }
+        return ""
+    }
+
+    function recordRefreshSubtitle() {
+        if (recordRefreshState === "pull") {
+            return "继续下拉获取最新记录"
+        }
+        if (recordRefreshState === "release") {
+            return "松手立即更新记录"
+        }
+        if (recordRefreshState === "refreshing") {
+            return "正在同步最新记录"
+        }
+        if (recordRefreshState === "success") {
+            return "记录已更新"
+        }
+        if (recordRefreshState === "error") {
+            return "请稍后重试"
+        }
+        return ""
+    }
+
     Component.onCompleted: {
         if (controller) {
             controller.requestData()
@@ -42,10 +85,26 @@ Item {
 
         function onLoadingChanged(isLoading) {
             if (isLoading) {
-                loadingOverlay.showLoading("请稍等")
+                if (!behaviorPage.inlineRecordRefreshActive) {
+                    loadingOverlay.showLoading("请稍等")
+                }
             } else {
                 loadingOverlay.hideLoading()
+                if (behaviorPage.inlineRecordRefreshActive && behaviorPage.recordRefreshState === "refreshing") {
+                    behaviorPage.recordRefreshState = "idle"
+                }
+                behaviorPage.inlineRecordRefreshActive = false
             }
+        }
+
+        function onRecordRefreshFinished(success, message) {
+            if (!behaviorPage.inlineRecordRefreshActive && behaviorPage.recordRefreshState !== "refreshing") {
+                return
+            }
+            behaviorPage.inlineRecordRefreshActive = false
+            behaviorPage.recordRefreshResultText = message || (success ? "刷新成功" : "刷新失败")
+            behaviorPage.recordRefreshState = success ? "success" : "error"
+            recordRefreshDoneTimer.restart()
         }
 
         function onToastRequested(message, toastType) {
@@ -56,6 +115,16 @@ Item {
             if (controller && !remarkEdit.activeFocus && remarkEdit.text !== controller.remark) {
                 remarkEdit.text = controller.remark
             }
+        }
+    }
+
+    Timer {
+        id: recordRefreshDoneTimer
+        interval: 900
+        repeat: false
+        onTriggered: {
+            behaviorPage.recordRefreshState = "idle"
+            behaviorPage.recordRefreshResultText = ""
         }
     }
 
@@ -125,67 +194,82 @@ Item {
                 elide: Text.ElideRight
             }
 
-            ToolButton {
+            Rectangle {
                 id: settingsButton
-                width: behaviorPage.toolbarIconSize
-                height: behaviorPage.toolbarIconSize
+                width: behaviorPage.topActionButtonSize
+                height: behaviorPage.topActionButtonSize
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.right: logoutButton.left
-                anchors.rightMargin: behaviorPage.sp(30)
-                contentItem: Image {
+                anchors.rightMargin: behaviorPage.sp(24)
+                radius: behaviorPage.sp(8)
+                color: settingsMouseArea.pressed ? "#335B82" : "transparent"
+
+                Image {
                     anchors.centerIn: parent
                     source: Root.ImageResources.iconSettings
-                    width: behaviorPage.toolbarIconSize
-                    height: behaviorPage.toolbarIconSize
+                    width: behaviorPage.topActionIconSize
+                    height: behaviorPage.topActionIconSize
                     fillMode: Image.PreserveAspectFit
+                    smooth: true
                 }
-                background: Rectangle {
-                    color: parent.down ? "#335B82" : "transparent"
-                    radius: 6
+
+                MouseArea {
+                    id: settingsMouseArea
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: windowManager.switchToPage("password")
                 }
-                onClicked: windowManager.switchToPage("password")
             }
 
-            ToolButton {
+            Rectangle {
                 id: logoutButton
-                width: behaviorPage.toolbarIconSize
-                height: behaviorPage.toolbarIconSize
+                width: behaviorPage.topActionButtonSize
+                height: behaviorPage.topActionButtonSize
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.right: parent.right
                 anchors.rightMargin: behaviorPage.sp(20)
-                contentItem: Canvas {
+                radius: behaviorPage.sp(8)
+                color: logoutMouseArea.pressed ? "#335B82" : "transparent"
+
+                Canvas {
                     id: logoutCanvas
-                    anchors.fill: parent
+                    width: behaviorPage.topActionIconSize
+                    height: behaviorPage.topActionIconSize
+                    anchors.centerIn: parent
                     antialiasing: true
+                    onWidthChanged: requestPaint()
+                    onHeightChanged: requestPaint()
                     onPaint: {
                         var ctx = getContext("2d")
                         var w = width
                         var h = height
                         ctx.clearRect(0, 0, w, h)
                         ctx.strokeStyle = "#FFFFFF"
-                        ctx.lineWidth = Math.max(2, behaviorPage.sp(3))
+                        ctx.lineWidth = Math.max(3, behaviorPage.sp(4))
                         ctx.lineCap = "round"
                         ctx.lineJoin = "round"
                         ctx.beginPath()
-                        ctx.moveTo(w * 0.56, h * 0.24)
-                        ctx.lineTo(w * 0.30, h * 0.24)
-                        ctx.lineTo(w * 0.30, h * 0.76)
-                        ctx.lineTo(w * 0.56, h * 0.76)
+                        ctx.moveTo(w * 0.54, h * 0.18)
+                        ctx.lineTo(w * 0.20, h * 0.18)
+                        ctx.lineTo(w * 0.20, h * 0.82)
+                        ctx.lineTo(w * 0.54, h * 0.82)
                         ctx.stroke()
                         ctx.beginPath()
-                        ctx.moveTo(w * 0.52, h * 0.5)
-                        ctx.lineTo(w * 0.82, h * 0.5)
-                        ctx.moveTo(w * 0.66, h * 0.36)
-                        ctx.lineTo(w * 0.82, h * 0.5)
-                        ctx.lineTo(w * 0.66, h * 0.64)
+                        ctx.moveTo(w * 0.47, h * 0.5)
+                        ctx.lineTo(w * 0.88, h * 0.5)
+                        ctx.moveTo(w * 0.68, h * 0.32)
+                        ctx.lineTo(w * 0.88, h * 0.5)
+                        ctx.lineTo(w * 0.68, h * 0.68)
                         ctx.stroke()
                     }
                 }
-                background: Rectangle {
-                    color: parent.down ? "#335B82" : "transparent"
-                    radius: 6
+
+                MouseArea {
+                    id: logoutMouseArea
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: windowManager.replaceWithPage("login")
                 }
-                onClicked: windowManager.replaceWithPage("login")
             }
         }
 
@@ -597,94 +681,364 @@ Item {
                         }
                     }
 
-                    ListView {
-                        id: recordListView
+                    Item {
                         width: parent.width
                         height: parent.height - behaviorPage.sp(89)
                         clip: true
-                        model: controller ? controller.records : []
 
-                        delegate: Row {
-                            width: recordListView.width
-                            height: behaviorPage.sp(60)
-                            spacing: behaviorPage.sp(14)
+                        ListView {
+                            id: recordListView
+                            anchors.fill: parent
+                            clip: true
+                            boundsBehavior: Flickable.DragAndOvershootBounds
+                            model: controller ? controller.records : []
+                            property bool pullRefreshArmed: false
+                            readonly property real pullRefreshThreshold: behaviorPage.sp(70)
+                            readonly property real pullRefreshDistance: Math.max(0, originY - contentY)
 
-                            Column {
-                                width: behaviorPage.sp(15)
-                                height: parent.height
-
-                                Rectangle {
-                                    width: behaviorPage.sp(4)
-                                    height: behaviorPage.sp(7)
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    color: "#FFFFFF"
+                            onMovementStarted: {
+                                if (!behaviorPage.inlineRecordRefreshActive) {
+                                    recordRefreshDoneTimer.stop()
+                                    if (behaviorPage.recordRefreshState !== "refreshing") {
+                                        behaviorPage.recordRefreshState = "idle"
+                                        behaviorPage.recordRefreshResultText = ""
+                                    }
                                 }
+                                pullRefreshArmed = false
+                            }
+                            onContentYChanged: {
+                                if (draggingVertically && controller && !behaviorPage.inlineRecordRefreshActive) {
+                                    pullRefreshArmed = contentY < originY - pullRefreshThreshold
+                                    if (pullRefreshDistance > behaviorPage.sp(8)) {
+                                        behaviorPage.recordRefreshState = pullRefreshArmed ? "release" : "pull"
+                                    } else if (behaviorPage.recordRefreshState === "pull" || behaviorPage.recordRefreshState === "release") {
+                                        behaviorPage.recordRefreshState = "idle"
+                                    }
+                                }
+                            }
+                            onMovementEnded: {
+                                if (pullRefreshArmed && controller) {
+                                    behaviorPage.inlineRecordRefreshActive = true
+                                    behaviorPage.recordRefreshState = "refreshing"
+                                    behaviorPage.recordRefreshResultText = ""
+                                    controller.refreshRecords()
+                                } else if (behaviorPage.recordRefreshState === "pull" || behaviorPage.recordRefreshState === "release") {
+                                    behaviorPage.recordRefreshState = "idle"
+                                }
+                                pullRefreshArmed = false
+                            }
 
-                                Rectangle {
+                            delegate: Row {
+                                width: recordListView.width
+                                height: behaviorPage.sp(60)
+                                spacing: behaviorPage.sp(14)
+
+                                Column {
                                     width: behaviorPage.sp(15)
-                                    height: behaviorPage.sp(15)
-                                    radius: 8
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    color: "#FFFFFF"
+                                    height: parent.height
+
+                                    Rectangle {
+                                        width: behaviorPage.sp(4)
+                                        height: behaviorPage.sp(7)
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        color: "#FFFFFF"
+                                    }
+
+                                    Rectangle {
+                                        width: behaviorPage.sp(15)
+                                        height: behaviorPage.sp(15)
+                                        radius: 8
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        color: "#FFFFFF"
+                                    }
+
+                                    Rectangle {
+                                        width: behaviorPage.sp(4)
+                                        height: parent.height - behaviorPage.sp(22)
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        color: "#FFFFFF"
+                                    }
                                 }
 
-                                Rectangle {
-                                    width: behaviorPage.sp(4)
-                                    height: parent.height - behaviorPage.sp(22)
-                                    anchors.horizontalCenter: parent.horizontalCenter
+                                Text {
+                                    width: parent.width - behaviorPage.sp(35)
+                                    text: modelData.timeText + " " + modelData.content
                                     color: "#FFFFFF"
+                                    font.pixelSize: behaviorPage.sp(24)
+                                    wrapMode: Text.WordWrap
+                                    maximumLineCount: 2
+                                    elide: Text.ElideRight
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+
+                            footer: Item {
+                                width: recordListView.width
+                                height: behaviorPage.sp(64)
+                                visible: controller && controller.records.length > 0 && controller.hasMoreRecords
+
+                                Rectangle {
+                                    width: behaviorPage.sp(180)
+                                    height: behaviorPage.sp(42)
+                                    anchors.centerIn: parent
+                                    radius: height / 2
+                                    color: loadMoreArea.pressed ? "#DDE7EF" : "#F8FBFF"
+                                    border.color: "#35E6F0"
+                                    border.width: 1
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "加载更多"
+                                        color: "#24425D"
+                                        font.pixelSize: behaviorPage.sp(18)
+                                        font.weight: Font.Medium
+                                    }
+
+                                    MouseArea {
+                                        id: loadMoreArea
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: if (controller) controller.loadMoreRecords()
+                                    }
                                 }
                             }
 
                             Text {
-                                width: parent.width - behaviorPage.sp(35)
-                                text: modelData.timeText + " " + modelData.content
-                                color: "#FFFFFF"
-                                font.pixelSize: behaviorPage.sp(24)
-                                wrapMode: Text.WordWrap
-                                maximumLineCount: 2
-                                elide: Text.ElideRight
-                                verticalAlignment: Text.AlignVCenter
+                                anchors.centerIn: parent
+                                visible: controller && controller.records.length === 0
+                                text: controller && controller.liens.length === 0 ? "暂无留置对象" : "暂无记录"
+                                color: "#C8FFFFFF"
+                                font.pixelSize: behaviorPage.sp(22)
                             }
                         }
 
-                        footer: Item {
-                            width: recordListView.width
-                            height: behaviorPage.sp(64)
-                            visible: controller && controller.records.length > 0 && controller.hasMoreRecords
+                        Rectangle {
+                            id: recordRefreshIndicator
+                            width: behaviorPage.sp(224)
+                            height: behaviorPage.sp(58)
+                            x: (parent.width - width) / 2
+                            y: {
+                                if (behaviorPage.recordRefreshState === "idle") {
+                                    return -height - behaviorPage.sp(6)
+                                }
+                                if (behaviorPage.recordRefreshState === "refreshing"
+                                        || behaviorPage.recordRefreshState === "success"
+                                        || behaviorPage.recordRefreshState === "error") {
+                                    return behaviorPage.sp(2)
+                                }
+                                return Math.min(behaviorPage.sp(2), -height + recordListView.pullRefreshDistance * 0.9)
+                            }
+                            radius: behaviorPage.sp(8)
+                            color: "#7011263D"
+                            border.color: recordRefreshIndicator.accentColor
+                            border.width: 0
+                            opacity: behaviorPage.recordRefreshState === "idle"
+                                     ? 0
+                                     : ((behaviorPage.recordRefreshState === "refreshing"
+                                         || behaviorPage.recordRefreshState === "success"
+                                         || behaviorPage.recordRefreshState === "error")
+                                        ? 1
+                                        : Math.min(1, 0.25 + recordListView.pullRefreshDistance / recordListView.pullRefreshThreshold))
+                            scale: behaviorPage.recordRefreshState === "idle" ? 0.96 : 1
+                            z: 10
+                            antialiasing: true
+
+                            readonly property color accentColor: behaviorPage.recordRefreshState === "error"
+                                                                 ? "#FF6F7D"
+                                                                 : (behaviorPage.recordRefreshState === "success" ? "#22FFAE" : "#00FFFF")
+
+                            Behavior on y {
+                                NumberAnimation {
+                                    duration: 210
+                                    easing.type: Easing.OutBack
+                                }
+                            }
+
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: 140
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+
+                            Behavior on scale {
+                                NumberAnimation {
+                                    duration: 180
+                                    easing.type: Easing.OutBack
+                                }
+                            }
 
                             Rectangle {
-                                width: behaviorPage.sp(180)
-                                height: behaviorPage.sp(42)
-                                anchors.centerIn: parent
-                                radius: height / 2
-                                color: loadMoreArea.pressed ? "#DDE7EF" : "#F8FBFF"
-                                border.color: "#35E6F0"
-                                border.width: 1
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "加载更多"
-                                    color: "#24425D"
-                                    font.pixelSize: behaviorPage.sp(18)
-                                    font.weight: Font.Medium
-                                }
-
-                                MouseArea {
-                                    id: loadMoreArea
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: if (controller) controller.loadMoreRecords()
+                                anchors.fill: parent
+                                anchors.margins: 1
+                                radius: parent.radius - 1
+                                opacity: 0.28
+                                gradient: Gradient {
+                                    orientation: Gradient.Horizontal
+                                    GradientStop {
+                                        position: 0
+                                        color: "#2A00FFFF"
+                                    }
+                                    GradientStop {
+                                        position: 1
+                                        color: behaviorPage.recordRefreshState === "error" ? "#24FF6F7D" : "#1622FFAE"
+                                    }
                                 }
                             }
-                        }
 
-                        Text {
-                            anchors.centerIn: parent
-                            visible: controller && controller.records.length === 0
-                            text: controller && controller.liens.length === 0 ? "暂无留置对象" : "暂无记录"
-                            color: "#C8FFFFFF"
-                            font.pixelSize: behaviorPage.sp(22)
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: behaviorPage.sp(12)
+
+                                Rectangle {
+                                    id: recordRefreshIconShell
+                                    width: behaviorPage.sp(36)
+                                    height: width
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    radius: width / 2
+                                    color: "#33102032"
+                                    border.color: recordRefreshIndicator.accentColor
+                                    border.width: 1
+                                    scale: behaviorPage.recordRefreshState === "pull"
+                                           ? 0.9 + Math.min(0.1, recordListView.pullRefreshDistance / recordListView.pullRefreshThreshold * 0.1)
+                                           : 1
+                                    antialiasing: true
+
+                                    Behavior on scale {
+                                        NumberAnimation {
+                                            duration: 180
+                                            easing.type: Easing.OutBack
+                                        }
+                                    }
+
+                                    Canvas {
+                                        id: recordRefreshIcon
+                                        anchors.centerIn: parent
+                                        width: behaviorPage.sp(27)
+                                        height: width
+                                        antialiasing: true
+                                        property real progress: behaviorPage.recordRefreshState === "refreshing"
+                                                                ? 0.72
+                                                                : Math.min(1, recordListView.pullRefreshDistance / recordListView.pullRefreshThreshold)
+                                        property real spinAngle: 0
+
+                                        onProgressChanged: requestPaint()
+                                        onSpinAngleChanged: requestPaint()
+                                        onWidthChanged: requestPaint()
+                                        onHeightChanged: requestPaint()
+
+                                        NumberAnimation on spinAngle {
+                                            from: 0
+                                            to: 360
+                                            duration: 820
+                                            loops: Animation.Infinite
+                                            running: behaviorPage.recordRefreshState === "refreshing"
+                                        }
+
+                                        Connections {
+                                            target: behaviorPage
+                                            function onRecordRefreshStateChanged() {
+                                                recordRefreshIcon.requestPaint()
+                                            }
+                                        }
+
+                                        onPaint: {
+                                            var ctx = getContext("2d")
+                                            var cx = width / 2
+                                            var cy = height / 2
+                                            var radius = Math.min(width, height) / 2 - behaviorPage.sp(3)
+                                            var state = behaviorPage.recordRefreshState
+                                            var accent = recordRefreshIndicator.accentColor
+
+                                            ctx.clearRect(0, 0, width, height)
+                                            ctx.lineCap = "round"
+                                            ctx.lineJoin = "round"
+                                            ctx.lineWidth = Math.max(2, behaviorPage.sp(2.4))
+
+                                            if (state === "success") {
+                                                ctx.strokeStyle = accent
+                                                ctx.beginPath()
+                                                ctx.moveTo(cx - radius * 0.58, cy - radius * 0.02)
+                                                ctx.lineTo(cx - radius * 0.18, cy + radius * 0.42)
+                                                ctx.lineTo(cx + radius * 0.62, cy - radius * 0.42)
+                                                ctx.stroke()
+                                                return
+                                            }
+
+                                            if (state === "error") {
+                                                ctx.strokeStyle = accent
+                                                ctx.beginPath()
+                                                ctx.moveTo(cx - radius * 0.45, cy - radius * 0.45)
+                                                ctx.lineTo(cx + radius * 0.45, cy + radius * 0.45)
+                                                ctx.moveTo(cx + radius * 0.45, cy - radius * 0.45)
+                                                ctx.lineTo(cx - radius * 0.45, cy + radius * 0.45)
+                                                ctx.stroke()
+                                                return
+                                            }
+
+                                            ctx.strokeStyle = "rgba(255, 255, 255, 0.22)"
+                                            ctx.beginPath()
+                                            ctx.arc(cx, cy, radius, 0, Math.PI * 2)
+                                            ctx.stroke()
+
+                                            if (state === "refreshing") {
+                                                var spinStart = (spinAngle - 90) * Math.PI / 180
+                                                ctx.strokeStyle = accent
+                                                ctx.beginPath()
+                                                ctx.arc(cx, cy, radius, spinStart, spinStart + Math.PI * 1.35)
+                                                ctx.stroke()
+                                                return
+                                            }
+
+                                            var start = -Math.PI / 2
+                                            var end = start + Math.max(0.08, progress) * Math.PI * 1.72
+                                            ctx.strokeStyle = accent
+                                            ctx.beginPath()
+                                            ctx.arc(cx, cy, radius, start, end)
+                                            ctx.stroke()
+
+                                            ctx.save()
+                                            ctx.translate(cx, cy)
+                                            if (state === "release") {
+                                                ctx.rotate(Math.PI)
+                                            }
+                                            ctx.strokeStyle = "#FFFFFF"
+                                            ctx.beginPath()
+                                            ctx.moveTo(0, -radius * 0.42)
+                                            ctx.lineTo(0, radius * 0.36)
+                                            ctx.moveTo(-radius * 0.33, radius * 0.04)
+                                            ctx.lineTo(0, radius * 0.38)
+                                            ctx.lineTo(radius * 0.33, radius * 0.04)
+                                            ctx.stroke()
+                                            ctx.restore()
+                                        }
+                                    }
+                                }
+
+                                Column {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: behaviorPage.sp(2)
+                                    width: behaviorPage.sp(146)
+
+                                    Text {
+                                        width: parent.width
+                                        text: behaviorPage.recordRefreshTitle()
+                                        color: "#FFFFFF"
+                                        font.pixelSize: behaviorPage.sp(17)
+                                        font.weight: Font.DemiBold
+                                        elide: Text.ElideRight
+                                    }
+
+                                    Text {
+                                        width: parent.width
+                                        text: behaviorPage.recordRefreshSubtitle()
+                                        color: behaviorPage.recordRefreshState === "error" ? "#FFD9DF" : "#CFEFFF"
+                                        font.pixelSize: behaviorPage.sp(12)
+                                        elide: Text.ElideRight
+                                        opacity: 0.88
+                                    }
+                                }
+                            }
                         }
                     }
                 }
