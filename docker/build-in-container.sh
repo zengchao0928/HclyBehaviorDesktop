@@ -762,7 +762,8 @@ install_desktop_icon() {
     target_group="\$(id -gn "\${target_user}" 2>/dev/null || printf '%s' "\${target_user}")"
     install -d -m 0755 -o "\${target_user}" -g "\${target_group}" "\${desktop_dir}"
 
-    local desktop_file="\${desktop_dir}/\${APP_ID}.desktop"
+    local desktop_file="\${desktop_dir}/\${APP_DISPLAY_NAME}.desktop"
+    rm -f "\${desktop_dir}/\${APP_ID}.desktop"
     cp "/usr/share/applications/\${APP_ID}.desktop" "\${desktop_file}"
     chmod 0755 "\${desktop_file}"
     chown "\${target_user}:\${target_group}" "\${desktop_file}"
@@ -788,6 +789,7 @@ EOF
 set -Eeuo pipefail
 
 APP_ID="${APP_ID}"
+APP_DISPLAY_NAME="${APP_DISPLAY_NAME}"
 
 find_target_user() {
     if [[ -n "\${SUDO_USER:-}" && "\${SUDO_USER}" != "root" ]]; then
@@ -849,7 +851,7 @@ remove_desktop_icon_for_user() {
     local desktop_dir
     while IFS= read -r desktop_dir; do
         [[ -n "\${desktop_dir}" ]] || continue
-        rm -f "\${desktop_dir}/\${APP_ID}.desktop"
+        rm -f "\${desktop_dir}/\${APP_ID}.desktop" "\${desktop_dir}/\${APP_DISPLAY_NAME}.desktop"
     done < <(desktop_dir_for_user "\${target_user}" || true)
 }
 

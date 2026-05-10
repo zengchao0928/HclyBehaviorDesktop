@@ -14,7 +14,7 @@ ApplicationWindow {
     height: windowConfig ? windowConfig.windowHeight : 800
     minimumWidth: windowConfig ? windowConfig.windowMinWidth : 1280
     minimumHeight: windowConfig ? windowConfig.windowMinHeight : 800
-    title: windowConfig ? windowConfig.appName : "留置中心"
+    title: windowConfig ? windowConfig.appName : "留置中心打标"
     color: "#0D1724"
 
     background: Rectangle {

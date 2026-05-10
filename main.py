@@ -129,7 +129,7 @@ def main() -> None:
 
     app = QGuiApplication(sys.argv)
     app.setOrganizationName("Hcly")
-    app.setApplicationName("留置中心")
+    app.setApplicationName("留置中心打标")
     _configure_app_font(app, logger)
     _configure_app_icon(app, logger)
 

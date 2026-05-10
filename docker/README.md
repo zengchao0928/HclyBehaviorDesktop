@@ -112,18 +112,3 @@ git push origin master
 ```bash
 git remote -v
 ```
-
-### 切换默认推送仓库
-
-如果想让 GitHub 成为默认推送仓库：
-
-```bash
-# 重命名当前 origin 为 gitee
-git remote rename origin gitee
-
-# 重命名 github 为 origin
-git remote rename github origin
-
-# 现在 git push 默认推送到 GitHub
-git push origin master
-```

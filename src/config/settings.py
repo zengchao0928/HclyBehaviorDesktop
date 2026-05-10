@@ -4,7 +4,7 @@
 应用配置。
 """
 
-APP_NAME = "留置中心"
+APP_NAME = "留置中心打标"
 APP_VERSION_NAME = "1.0.0"
 APP_VERSION_CODE = 1
 APP_VERSION = APP_VERSION_NAME
