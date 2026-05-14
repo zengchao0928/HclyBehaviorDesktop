@@ -54,6 +54,22 @@ build_app() {
     [[ -x "${APP_BIN}" ]] || die "未找到 PyInstaller 主程序: ${APP_BIN}"
 }
 
+install_fcitx_plugin() {
+    log "安装 fcitx5 Qt6 输入法插件"
+    local plugin_src="/tmp/libfcitx5platforminputcontextplugin.so"
+    local plugin_dst="${APP_BUNDLE}/_internal/PySide6/Qt/plugins/platforminputcontexts"
+
+    if [[ ! -f "${plugin_src}" ]]; then
+        log "警告: fcitx5 Qt6 插件未找到 (${plugin_src})，跳过"
+        return 0
+    fi
+
+    mkdir -p "${plugin_dst}"
+    cp "${plugin_src}" "${plugin_dst}/"
+    chmod 0755 "${plugin_dst}/libfcitx5platforminputcontextplugin.so"
+    log "fcitx5 Qt6 插件已复制到: ${plugin_dst}"
+}
+
 write_default_config() {
     log "写入默认接口配置"
     local default_base_url
@@ -139,7 +155,16 @@ fi
 export QT_QUICK_CONTROLS_STYLE="\${QT_QUICK_CONTROLS_STYLE:-Basic}"
 export QT_QPA_PLATFORM="\${HCLY_QT_QPA_PLATFORM:-xcb}"
 export QT_XCB_GL_INTEGRATION="\${QT_XCB_GL_INTEGRATION:-none}"
-export QT_PLUGIN_PATH="\${APP_DIR}/_internal/PySide6/Qt/plugins\${QT_PLUGIN_PATH:+:\${QT_PLUGIN_PATH}}"
+export GDK_BACKEND="\${GDK_BACKEND:-x11}"
+export GTK_IM_MODULE="\${GTK_IM_MODULE:-fcitx}"
+export QT_IM_MODULE="\${QT_IM_MODULE:-fcitx}"
+export XMODIFIERS="\${XMODIFIERS:-@im=fcitx}"
+if [[ "\${QT_QPA_PLATFORM}" == "xcb" ]]; then
+    export WAYLAND_DISPLAY="\${HCLY_WAYLAND_DISPLAY:-}"
+elif [[ -n "\${HCLY_WAYLAND_DISPLAY+x}" ]]; then
+    export WAYLAND_DISPLAY="\${HCLY_WAYLAND_DISPLAY}"
+fi
+export QT_PLUGIN_PATH="\${APP_DIR}/_internal/PySide6/Qt/plugins:/usr/lib/\$(uname -m)-linux-gnu/qt6/plugins:/usr/lib64/qt6/plugins\${QT_PLUGIN_PATH:+:\${QT_PLUGIN_PATH}}"
 export QT_QPA_PLATFORM_PLUGIN_PATH="\${APP_DIR}/_internal/PySide6/Qt/plugins/platforms"
 export QML_IMPORT_PATH="\${APP_DIR}/_internal/PySide6/Qt/qml:\${APP_DIR}/_internal/qml:\${APP_DIR}/_internal/library/network_chucker/qml\${QML_IMPORT_PATH:+:\${QML_IMPORT_PATH}}"
 APP_NATIVE_LIBRARY_PATH="\${APP_DIR}/lib/system:\${APP_DIR}/_internal:\${APP_DIR}/_internal/PySide6/Qt/lib"
@@ -569,6 +594,15 @@ make_deb_package() {
 #!/usr/bin/env bash
 export QT_QPA_PLATFORM="\${HCLY_QT_QPA_PLATFORM:-xcb}"
 export QT_XCB_GL_INTEGRATION="\${QT_XCB_GL_INTEGRATION:-none}"
+export GDK_BACKEND="\${GDK_BACKEND:-x11}"
+export GTK_IM_MODULE="\${GTK_IM_MODULE:-fcitx}"
+export QT_IM_MODULE="\${QT_IM_MODULE:-fcitx}"
+export XMODIFIERS="\${XMODIFIERS:-@im=fcitx}"
+if [[ "\${QT_QPA_PLATFORM}" == "xcb" ]]; then
+    export WAYLAND_DISPLAY="\${HCLY_WAYLAND_DISPLAY:-}"
+elif [[ -n "\${HCLY_WAYLAND_DISPLAY+x}" ]]; then
+    export WAYLAND_DISPLAY="\${HCLY_WAYLAND_DISPLAY}"
+fi
 exec /opt/${APP_ID}/${APP_ID} "\$@"
 EOF
     chmod 0755 "${deb_root}/usr/bin/${APP_ID}"
@@ -909,6 +943,7 @@ EOF
 main() {
     prepare_dirs
     build_app
+    install_fcitx_plugin
     write_default_config
     write_launcher
     prune_qt_bundle

@@ -28,6 +28,34 @@ def _configure_qt_quick_controls_style(logger: logging.Logger) -> None:
     style = os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
     logger.info("Qt Quick Controls style: %s", style)
 
+    # 国产 Linux 系统（统信 UOS / 麒麟）使用 fcitx 输入法框架，
+    # 需要固定走 X11/xcb 并补齐 XIM 环境，避免 Wayland 会话下无法输入中文。
+    if sys.platform.startswith("linux"):
+        qpa_platform = os.environ.setdefault(
+            "QT_QPA_PLATFORM",
+            os.environ.get("HCLY_QT_QPA_PLATFORM", "xcb"),
+        )
+        os.environ.setdefault("QT_XCB_GL_INTEGRATION", "none")
+        os.environ.setdefault("GDK_BACKEND", "x11")
+        os.environ.setdefault("GTK_IM_MODULE", "fcitx")
+        os.environ.setdefault("QT_IM_MODULE", "fcitx")
+        os.environ.setdefault("XMODIFIERS", "@im=fcitx")
+
+        if qpa_platform == "xcb":
+            os.environ["WAYLAND_DISPLAY"] = os.environ.get("HCLY_WAYLAND_DISPLAY", "")
+        elif "HCLY_WAYLAND_DISPLAY" in os.environ:
+            os.environ["WAYLAND_DISPLAY"] = os.environ["HCLY_WAYLAND_DISPLAY"]
+
+        logger.info(
+            "Linux input method environment: QT_QPA_PLATFORM=%s, GTK_IM_MODULE=%s, "
+            "QT_IM_MODULE=%s, XMODIFIERS=%s, WAYLAND_DISPLAY=%s",
+            os.environ.get("QT_QPA_PLATFORM", ""),
+            os.environ.get("GTK_IM_MODULE", ""),
+            os.environ.get("QT_IM_MODULE", ""),
+            os.environ.get("XMODIFIERS", ""),
+            os.environ.get("WAYLAND_DISPLAY", ""),
+        )
+
 
 def _pick_font_family(available_families, candidates) -> str:
     """从系统已安装字体中挑选合适的简体中文界面字体。"""

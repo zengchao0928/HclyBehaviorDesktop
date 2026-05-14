@@ -80,12 +80,14 @@ HCLY_DEBUG_LAUNCH=1 /usr/bin/hcly-behavior-desktop
 HCLY_QT_QPA_PLATFORM=wayland /usr/bin/hcly-behavior-desktop
 HCLY_USE_BUNDLED_GLIBC=0 /usr/bin/hcly-behavior-desktop
 HCLY_SOFTWARE_RENDERING=0 /usr/bin/hcly-behavior-desktop
+QT_DEBUG_PLUGINS=1 /usr/bin/hcly-behavior-desktop
 ```
 
 - `HCLY_DEBUG_LAUNCH=1`：打印当前 glibc 和启动模式。
-- `HCLY_QT_QPA_PLATFORM=wayland`：临时尝试 Wayland 后端；默认启动脚本会固定使用 `xcb`，避免桌面环境自动选择未打包的 Wayland 插件。
+- `HCLY_QT_QPA_PLATFORM=wayland HCLY_WAYLAND_DISPLAY=wayland-0`：临时尝试 Wayland 后端；默认启动脚本会固定使用 `xcb` 并清空 `WAYLAND_DISPLAY`，让输入法走 X11/XIM。
 - `HCLY_USE_BUNDLED_GLIBC=0`：禁用包内 glibc，适合目标机系统 glibc 已经足够新时排查。
 - `HCLY_SOFTWARE_RENDERING=0`：关闭默认软件渲染，适合排查 Qt 图形后端问题。
+- `QT_DEBUG_PLUGINS=1`：输出 Qt 插件加载日志，用于确认 `platforminputcontexts/libfcitx5platforminputcontextplugin.so` 是否被找到。
 
 Docker 镜像构建阶段需要外网下载 apt 和 pip 包；目标 Linux 机器安装 deb 时只用 `dpkg`，不需要 `apt` 下载依赖。
 
