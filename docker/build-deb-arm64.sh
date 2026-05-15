@@ -12,7 +12,19 @@ export BUNDLE_SYSTEM_LIBS="${BUNDLE_SYSTEM_LIBS:-1}"
 source "${SCRIPT_DIR}/package.env"
 
 printf '==> 构建 Docker 打包镜像: %s (%s)\n' "${DOCKER_IMAGE}" "${DOCKER_PLATFORM}"
-docker build --platform "${DOCKER_PLATFORM}" -f "${SCRIPT_DIR}/Dockerfile" -t "${DOCKER_IMAGE}" "${PROJECT_ROOT}"
+if [[ "${HCLY_DOCKER_CACHE:-}" == "gha" ]]; then
+    CACHE_SCOPE="${HCLY_DOCKER_CACHE_SCOPE:-${DOCKER_IMAGE//[\/:]/-}}"
+    docker buildx build \
+        --platform "${DOCKER_PLATFORM}" \
+        -f "${SCRIPT_DIR}/Dockerfile" \
+        -t "${DOCKER_IMAGE}" \
+        --load \
+        --cache-from "type=gha,scope=${CACHE_SCOPE}" \
+        --cache-to "type=gha,mode=max,scope=${CACHE_SCOPE}" \
+        "${PROJECT_ROOT}"
+else
+    docker build --platform "${DOCKER_PLATFORM}" -f "${SCRIPT_DIR}/Dockerfile" -t "${DOCKER_IMAGE}" "${PROJECT_ROOT}"
+fi
 
 printf '\n==> 生成 Linux arm64 deb 离线包\n'
 docker run --rm --platform "${DOCKER_PLATFORM}" \
