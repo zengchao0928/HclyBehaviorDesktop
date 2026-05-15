@@ -33,6 +33,28 @@ sudo dpkg -r hcly-behavior-desktop
 
 启动器日志默认写入 `/opt/hcly-behavior-desktop/logs/launcher.log`，只有应用目录日志不可写时才回退到用户目录 `~/.hcly_behavior_desktop/logs/launcher.log`。
 
+## 日志查看
+
+目标机上优先看这两个文件：
+
+```bash
+tail -n 200 /opt/hcly-behavior-desktop/logs/launcher.log
+tail -n 200 ~/.hcly_behavior_desktop/logs/app.log
+```
+
+排查中文输入法时，用下面命令从终端启动一次应用，然后再查看 `launcher.log`。这会打印 Qt 平台、输入法环境变量、fcitx 插件是否存在，以及 Qt 插件加载过程：
+
+```bash
+HCLY_DEBUG_LAUNCH=1 QT_DEBUG_PLUGINS=1 /usr/bin/hcly-behavior-desktop
+tail -n 300 /opt/hcly-behavior-desktop/logs/launcher.log
+```
+
+如果应用目录日志不可写，查看备用日志：
+
+```bash
+tail -n 300 ~/.hcly_behavior_desktop/logs/launcher.log
+```
+
 ## 接口地址配置
 
 项目的接口基础地址由 `src/config/settings.py` 中的 `API_BASE_URL` 提供。启动时会先读取运行目录下的 `config.json`，取其中的 `baseUrl` 字段；如果文件不存在、格式错误或 `baseUrl` 为空，则回退到 `DEFAULT_API_BASE_URL`，当前默认值为 `http://10.1.100.126:8085/`。

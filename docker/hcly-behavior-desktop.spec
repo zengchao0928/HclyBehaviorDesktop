@@ -19,6 +19,7 @@ datas = [
 
 hiddenimports = [
     "PySide6.QtCore",
+    "PySide6.QtDBus",
     "PySide6.QtGui",
     "PySide6.QtNetwork",
     "PySide6.QtOpenGL",
@@ -27,6 +28,8 @@ hiddenimports = [
     "PySide6.QtQuickControls2",
     "PySide6.QtQuickLayouts",
     "PySide6.QtSvg",
+    # fcitx5 Qt6 输入法插件链接 Qt6Widgets，只作为运行库打包，不在业务代码中使用 Widgets UI。
+    "PySide6.QtWidgets",
 ]
 hiddenimports += collect_submodules("src")
 hiddenimports += collect_submodules("library.network_chucker")
@@ -65,7 +68,6 @@ excludes = [
     "PySide6.QtWebEngineQuick",
     "PySide6.QtWebEngineWidgets",
     "PySide6.QtWebSockets",
-    "PySide6.QtWidgets",
 ]
 
 a = Analysis(

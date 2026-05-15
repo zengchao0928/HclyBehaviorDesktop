@@ -70,6 +70,24 @@ install_fcitx_plugin() {
     log "fcitx5 Qt6 插件已复制到: ${plugin_dst}"
 }
 
+verify_fcitx_plugin() {
+    log "检查 fcitx5 Qt6 输入法插件依赖"
+    local plugin_path="${APP_BUNDLE}/_internal/PySide6/Qt/plugins/platforminputcontexts/libfcitx5platforminputcontextplugin.so"
+
+    if [[ ! -f "${plugin_path}" ]]; then
+        die "fcitx5 Qt6 输入法插件缺失: ${plugin_path}"
+    fi
+
+    local runtime_library_path="${APP_BUNDLE}/lib/system:${APP_BUNDLE}/_internal:${APP_BUNDLE}/_internal/PySide6/Qt/lib"
+    local ldd_output
+    ldd_output="$(LD_LIBRARY_PATH="${runtime_library_path}" ldd "${plugin_path}" 2>&1 || true)"
+    printf '%s\n' "${ldd_output}"
+
+    if grep -q 'not found' <<<"${ldd_output}"; then
+        die "fcitx5 Qt6 输入法插件存在未解析依赖"
+    fi
+}
+
 write_default_config() {
     log "写入默认接口配置"
     local default_base_url
@@ -208,6 +226,19 @@ if [[ "\${HCLY_DEBUG_LAUNCH:-0}" == "1" ]]; then
     printf 'QT_QPA_PLATFORM=%s\n' "\${QT_QPA_PLATFORM}" >&2
     printf 'HCLY_QT_QPA_PLATFORM=%s\n' "\${HCLY_QT_QPA_PLATFORM:-}" >&2
     printf 'QT_XCB_GL_INTEGRATION=%s\n' "\${QT_XCB_GL_INTEGRATION}" >&2
+    printf 'GDK_BACKEND=%s\n' "\${GDK_BACKEND}" >&2
+    printf 'GTK_IM_MODULE=%s\n' "\${GTK_IM_MODULE}" >&2
+    printf 'QT_IM_MODULE=%s\n' "\${QT_IM_MODULE}" >&2
+    printf 'XMODIFIERS=%s\n' "\${XMODIFIERS}" >&2
+    printf 'WAYLAND_DISPLAY=%s\n' "\${WAYLAND_DISPLAY:-}" >&2
+    printf 'QT_PLUGIN_PATH=%s\n' "\${QT_PLUGIN_PATH}" >&2
+    printf 'QT_QPA_PLATFORM_PLUGIN_PATH=%s\n' "\${QT_QPA_PLATFORM_PLUGIN_PATH}" >&2
+    printf 'FCITX_PLUGIN=%s\n' "\${APP_DIR}/_internal/PySide6/Qt/plugins/platforminputcontexts/libfcitx5platforminputcontextplugin.so" >&2
+    if [[ -f "\${APP_DIR}/_internal/PySide6/Qt/plugins/platforminputcontexts/libfcitx5platforminputcontextplugin.so" ]]; then
+        printf 'FCITX_PLUGIN_EXISTS=1\n' >&2
+    else
+        printf 'FCITX_PLUGIN_EXISTS=0\n' >&2
+    fi
     printf 'HCLY_SOFTWARE_RENDERING=%s\n' "\${HCLY_SOFTWARE_RENDERING:-1}" >&2
 fi
 
@@ -948,6 +979,7 @@ main() {
     write_launcher
     prune_qt_bundle
     bundle_system_libs
+    verify_fcitx_plugin
     bundle_glibc_runtime
     strip_elf_files
     report_bundle_size
