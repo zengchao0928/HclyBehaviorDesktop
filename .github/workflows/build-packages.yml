@@ -80,21 +80,23 @@ jobs:
 
   linux-deb:
     name: Linux ${{ matrix.arch }} deb
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        arch:
-          - amd64
-          - arm64
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
 
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
 
       - name: 配置 arm64 模拟环境
-        if: matrix.arch == 'arm64'
+        if: matrix.arch == 'arm64' && !contains(matrix.runner, '-arm')
         uses: docker/setup-qemu-action@v3
         with:
           platforms: arm64
