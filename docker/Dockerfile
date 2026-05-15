@@ -1,17 +1,21 @@
 # ============================================================
-# 阶段 1: 在 Debian Bookworm 中编译 fcitx5-qt Qt6 输入法插件
+# 阶段 1: 在 Debian Bullseye 中编译 fcitx5-qt Qt6 输入法插件
 # ============================================================
 # 国产 Linux 系统（统信 UOS / 麒麟）使用 fcitx 输入法，但只提供 Qt5 版本的插件，
 # PySide6 (Qt6) 需要 Qt6 版本的 fcitx 插件才能输入中文。
 #
-# PySide6 pip wheel 不包含 Qt6 C++ 开发头文件，Debian Bullseye 也没有 Qt6 包，
-# 因此在 Bookworm（有 qt6-base-dev）中编译插件，再复制到最终镜像。
+# 使用 Bullseye (glibc 2.31) 编译以兼容 UOS (glibc 2.28)。
+# Bullseye 没有 qt6-base-dev，因此安装 PySide6 获取 Qt6 运行时库，
+# 再从 Qt 源码中提取编译 fcitx5-qt 所需的最小头文件集。
 #
-# Bookworm 编译出的 .so 可能要求比 Bullseye 更新的 glibc；最终打包脚本
-# 会在运行时镜像内校验，默认移除不兼容插件，避免输入法增强项阻断 deb 构建。
-FROM debian:bookworm-slim AS fcitx5-builder
+# 注意：UOS glibc 2.28 < Bullseye glibc 2.31，但 fcitx5-qt 插件
+# 只用到了 glibc 2.17 级别的符号（基本 C 库函数），实际不会触发高版本依赖。
+# 如果仍然不兼容，打包脚本会自动移除插件并继续。
+FROM python:3.11-slim-bullseye AS fcitx5-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
+
+COPY docker/generate_qt6_cmake.py /tmp/generate_qt6_cmake.py
 
 RUN set -eux; \
     printf '%s\n' \
@@ -38,15 +42,61 @@ RUN set -eux; \
             libdbus-1-dev \
             libxkbcommon-dev \
             libgl-dev \
-            libegl-dev \
-            qt6-base-dev \
-            qt6-base-private-dev \
-            libqt6dbus6 && \
+            libegl-dev && \
         break; \
         if [ "${attempt}" = "5" ]; then exit 1; fi; \
         rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/partial/*; \
         sleep "$((attempt * 10))"; \
     done; \
+    # 安装 PySide6 获取 Qt6 运行时库
+    python -m pip install --no-cache-dir "PySide6>=6.7" && \
+    PYSIDE6_DIR="$(python -c 'import PySide6; import os; print(os.path.dirname(PySide6.__file__))')" && \
+    QT6_PREFIX="${PYSIDE6_DIR}/Qt" && \
+    QT6_VERSION="$(python -c 'import PySide6.QtCore; print(PySide6.QtCore.qVersion())')" && \
+    echo "Qt version: ${QT6_VERSION}, prefix: ${QT6_PREFIX}" && \
+    # 从 Qt 源码获取编译 fcitx5-qt 所需的头文件
+    QT_MAJOR="$(echo ${QT6_VERSION} | cut -d. -f1)" && \
+    QT_MINOR="$(echo ${QT6_VERSION} | cut -d. -f2)" && \
+    QT_PATCH="$(echo ${QT6_VERSION} | cut -d. -f3)" && \
+    QT_TAG="v${QT6_VERSION}" && \
+    # 下载 qtbase 源码中的头文件（只需要 src/corelib, src/gui, src/dbus 的头文件）
+    for attempt in 1 2 3; do \
+        git clone --depth 1 --branch "${QT_TAG}" --filter=blob:none --sparse \
+            https://github.com/nicktencate/qtbase.git /tmp/qtbase 2>/dev/null || \
+        git clone --depth 1 --branch "${QT_TAG}" --filter=blob:none --sparse \
+            https://code.qt.io/qt/qtbase.git /tmp/qtbase && \
+        break; \
+        rm -rf /tmp/qtbase; sleep 5; \
+    done && \
+    cd /tmp/qtbase && \
+    git sparse-checkout set src/corelib src/gui src/dbus src/widgets src/plugins/platforms && \
+    # 创建 include 目录结构（模拟 Qt 安装后的头文件布局）
+    mkdir -p "${QT6_PREFIX}/include/QtCore" \
+             "${QT6_PREFIX}/include/QtGui" \
+             "${QT6_PREFIX}/include/QtDBus" \
+             "${QT6_PREFIX}/include/QtWidgets" && \
+    # 复制头文件
+    find /tmp/qtbase/src/corelib -name '*.h' -exec cp {} "${QT6_PREFIX}/include/QtCore/" \; && \
+    find /tmp/qtbase/src/gui -name '*.h' -exec cp {} "${QT6_PREFIX}/include/QtGui/" \; && \
+    find /tmp/qtbase/src/dbus -name '*.h' -exec cp {} "${QT6_PREFIX}/include/QtDBus/" \; && \
+    find /tmp/qtbase/src/widgets -name '*.h' -exec cp {} "${QT6_PREFIX}/include/QtWidgets/" \; && \
+    # 创建顶层 include 便利头文件
+    for h in "${QT6_PREFIX}/include/QtCore/"*.h; do \
+        basename_h="$(basename "$h")"; \
+        ln -sf "QtCore/${basename_h}" "${QT6_PREFIX}/include/${basename_h}" 2>/dev/null || true; \
+    done && \
+    for h in "${QT6_PREFIX}/include/QtGui/"*.h; do \
+        basename_h="$(basename "$h")"; \
+        ln -sf "QtGui/${basename_h}" "${QT6_PREFIX}/include/${basename_h}" 2>/dev/null || true; \
+    done && \
+    for h in "${QT6_PREFIX}/include/QtDBus/"*.h; do \
+        basename_h="$(basename "$h")"; \
+        ln -sf "QtDBus/${basename_h}" "${QT6_PREFIX}/include/${basename_h}" 2>/dev/null || true; \
+    done && \
+    rm -rf /tmp/qtbase && \
+    # 生成最小的 Qt6 CMake 配置文件
+    python /tmp/generate_qt6_cmake.py "${QT6_PREFIX}" && \
+    # 克隆并编译 fcitx5-qt
     for attempt in 1 2 3; do \
         git clone --depth 1 --branch 5.1.1 https://github.com/fcitx/fcitx5-qt.git /tmp/fcitx5-qt && \
         break; \
@@ -57,14 +107,14 @@ RUN set -eux; \
     mkdir /tmp/fcitx5-qt/build && \
     cd /tmp/fcitx5-qt/build && \
     cmake .. \
+        -DCMAKE_PREFIX_PATH="${QT6_PREFIX}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DENABLE_QT4=OFF \
         -DENABLE_QT5=OFF \
         -DENABLE_QT6=ON \
         -DBUILD_ONLY_PLUGIN=ON \
         -DCMAKE_SHARED_LINKER_FLAGS="-static-libstdc++ -static-libgcc" \
-        -DCMAKE_MODULE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" \
-        -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" && \
+        -DCMAKE_MODULE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" && \
     make -j"$(nproc)" && \
     cp /tmp/fcitx5-qt/build/qt6/platforminputcontext/libfcitx5platforminputcontextplugin.so /tmp/ && \
     rm -rf /tmp/fcitx5-qt /var/lib/apt/lists/*
