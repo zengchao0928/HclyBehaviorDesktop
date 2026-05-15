@@ -36,15 +36,46 @@ def _choose_linux_qpa_platform() -> str:
 
 
 def _choose_linux_input_method(qpa_platform: str) -> str:
-    """为 Qt6 选择输入法模块，避免使用目标机缺失的 Qt6 fcitx 插件。"""
+    """为 Qt6 选择输入法模块，优先使用系统 fcitx5 插件以确保兼容性。"""
     if "HCLY_QT_IM_MODULE" in os.environ:
         return os.environ.get("HCLY_QT_IM_MODULE", "")
 
+    import platform
+
+    arch = platform.machine()
+    system_plugin_dirs = [
+        Path(f"/usr/lib/{arch}-linux-gnu/qt6/plugins/platforminputcontexts"),
+        Path("/usr/lib64/qt6/plugins/platforminputcontexts"),
+        Path("/usr/lib/qt6/plugins/platforminputcontexts"),
+    ]
+
     app_dir = Path(__file__).resolve().parent
-    plugin_dir = app_dir / "_internal" / "PySide6" / "Qt" / "plugins" / "platforminputcontexts"
-    fcitx_candidates = (
-        plugin_dir / "libfcitx5platforminputcontextplugin.so",
-        plugin_dir / "libfcitxplatforminputcontextplugin-qt6.so",
+    bundled_plugin_dir = app_dir / "_internal" / "PySide6" / "Qt" / "plugins" / "platforminputcontexts"
+
+    # 检查系统是否安装了 fcitx5 Qt6 插件（UOS/麒麟自带）
+    system_fcitx_found = False
+    system_fcitx_plugin_dir = None
+    for sys_dir in system_plugin_dirs:
+        if (sys_dir / "libfcitx5platforminputcontextplugin.so").is_file() or \
+           (sys_dir / "libfcitxplatforminputcontextplugin-qt6.so").is_file():
+            system_fcitx_found = True
+            system_fcitx_plugin_dir = sys_dir
+            break
+
+    # 如果系统有 fcitx5 插件，确保 QT_PLUGIN_PATH 包含系统插件目录
+    # 这样即使打包的插件因依赖缺失加载失败，Qt 也能找到系统的
+    if system_fcitx_plugin_dir:
+        qt_plugin_path = os.environ.get("QT_PLUGIN_PATH", "")
+        system_plugins_root = str(system_fcitx_plugin_dir.parent)
+        if system_plugins_root not in qt_plugin_path:
+            if qt_plugin_path:
+                os.environ["QT_PLUGIN_PATH"] = f"{qt_plugin_path}:{system_plugins_root}"
+            else:
+                os.environ["QT_PLUGIN_PATH"] = system_plugins_root
+
+    bundled_fcitx_candidates = (
+        bundled_plugin_dir / "libfcitx5platforminputcontextplugin.so",
+        bundled_plugin_dir / "libfcitxplatforminputcontextplugin-qt6.so",
     )
 
     if "wayland" in qpa_platform:
@@ -53,13 +84,47 @@ def _choose_linux_input_method(qpa_platform: str) -> str:
 
     os.environ.setdefault("QT_IM_MODULES", "fcitx;ibus;xim")
 
-    if any(path.is_file() for path in fcitx_candidates):
+    # 系统有 fcitx 插件或打包中有 fcitx 插件，都使用 fcitx
+    if system_fcitx_found or any(path.is_file() for path in bundled_fcitx_candidates):
         return "fcitx"
 
-    if (plugin_dir / "libibusplatforminputcontextplugin.so").is_file():
+    if (bundled_plugin_dir / "libibusplatforminputcontextplugin.so").is_file():
         return "ibus"
 
     return "xim"
+
+
+def _diagnose_input_method(logger: logging.Logger) -> None:
+    """诊断输入法环境，帮助排查中文输入问题。"""
+    import subprocess
+
+    # 检查 fcitx5 进程是否在运行
+    try:
+        result = subprocess.run(
+            ["pgrep", "-x", "fcitx5"],
+            capture_output=True, text=True, timeout=5,
+        )
+        fcitx5_running = result.returncode == 0
+        logger.info("fcitx5 process running: %s (pid: %s)",
+                    fcitx5_running, result.stdout.strip() if fcitx5_running else "N/A")
+    except Exception as e:
+        logger.info("fcitx5 process check failed: %s", e)
+
+    # 检查 D-Bus session bus
+    dbus_addr = os.environ.get("DBUS_SESSION_BUS_ADDRESS", "")
+    logger.info("DBUS_SESSION_BUS_ADDRESS: %s", dbus_addr or "(not set)")
+
+    # 检查 platforminputcontexts 目录中实际存在的插件
+    app_dir = Path(__file__).resolve().parent
+    pic_dir = app_dir / "_internal" / "PySide6" / "Qt" / "plugins" / "platforminputcontexts"
+    if pic_dir.is_dir():
+        plugins = [f.name for f in pic_dir.iterdir() if f.suffix == ".so"]
+        logger.info("Bundled platforminputcontexts plugins: %s", plugins)
+    else:
+        logger.info("Bundled platforminputcontexts dir not found: %s", pic_dir)
+
+    # 检查 LD_LIBRARY_PATH
+    logger.info("LD_LIBRARY_PATH: %s", os.environ.get("LD_LIBRARY_PATH", "(not set)"))
 
 
 def _configure_qt_quick_controls_style(logger: logging.Logger) -> None:
@@ -90,16 +155,19 @@ def _configure_qt_quick_controls_style(logger: logging.Logger) -> None:
 
         logger.info(
             "Linux input method environment: QT_QPA_PLATFORM=%s, GTK_IM_MODULE=%s, "
-            "QT_IM_MODULE=%s, QT_IM_MODULES=%s, XMODIFIERS=%s, WAYLAND_DISPLAY=%s, "
-            "QT_VIRTUALKEYBOARD_DESKTOP_DISABLE=%s",
+            "QT_IM_MODULE=%s, XMODIFIERS=%s, WAYLAND_DISPLAY=%s, "
+            "QT_VIRTUALKEYBOARD_DESKTOP_DISABLE=%s, QT_PLUGIN_PATH=%s",
             os.environ.get("QT_QPA_PLATFORM", ""),
             os.environ.get("GTK_IM_MODULE", ""),
             os.environ.get("QT_IM_MODULE", ""),
-            os.environ.get("QT_IM_MODULES", ""),
             os.environ.get("XMODIFIERS", ""),
             os.environ.get("WAYLAND_DISPLAY", ""),
             os.environ.get("QT_VIRTUALKEYBOARD_DESKTOP_DISABLE", ""),
+            os.environ.get("QT_PLUGIN_PATH", ""),
         )
+
+        # 诊断：检查 fcitx5 是否在运行以及 D-Bus 是否可用
+        _diagnose_input_method(logger)
 
 
 def _pick_font_family(available_families, candidates) -> str:

@@ -458,7 +458,6 @@ Item {
                                 font.pixelSize: behaviorPage.sp(24)
                                 wrapMode: TextEdit.Wrap
                                 selectByMouse: true
-                                inputMethodHints: Qt.ImhPreferLowercase
                                 text: controller ? controller.remark : ""
                                 onTextChanged: if (controller && activeFocus) controller.setRemark(text)
 

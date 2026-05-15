@@ -71,7 +71,10 @@ RUN set -eux; \
             libxrandr2 \
             libxrender1 \
             libxshmfence1 \
-            libxtst6 && \
+            libxtst6 \
+            libfcitx5utils2 \
+            libfcitx5config6 \
+            libfcitx5core7 && \
         break; \
         if [ "${attempt}" = "5" ]; then exit 1; fi; \
         rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/partial/*; \

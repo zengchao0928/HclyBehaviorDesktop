@@ -66,6 +66,31 @@ install_fcitx_plugin() {
     local plugin_src="/tmp/libfcitx5platforminputcontextplugin.so"
     local plugin_dst="${APP_BUNDLE}/_internal/PySide6/Qt/plugins/platforminputcontexts"
 
+    # 优先使用预编译的插件（通过 Docker volume 或构建步骤提供）
+    if [[ ! -f "${plugin_src}" ]]; then
+        # 尝试从构建环境中编译 fcitx5-qt 插件
+        log "尝试编译 fcitx5 Qt6 输入法插件（匹配 PySide6 Qt 版本）"
+        local qt_prefix
+        qt_prefix="$(python -c 'from PySide6 import __path__ as p; print(p[0] + "/Qt")' 2>/dev/null || true)"
+        if [[ -n "${qt_prefix}" && -d "${qt_prefix}" ]]; then
+            local build_ok=0
+            if command -v cmake >/dev/null 2>&1 && [[ -d "/tmp/fcitx5-qt-src" ]]; then
+                (
+                    mkdir -p /tmp/fcitx5-qt-build
+                    cmake -S /tmp/fcitx5-qt-src -B /tmp/fcitx5-qt-build \
+                        -DCMAKE_PREFIX_PATH="${qt_prefix}" \
+                        -DENABLE_QT6=ON -DENABLE_QT5=OFF \
+                        -DCMAKE_BUILD_TYPE=Release 2>/dev/null &&
+                    cmake --build /tmp/fcitx5-qt-build --target fcitx5platforminputcontextplugin 2>/dev/null &&
+                    cp /tmp/fcitx5-qt-build/qt6/platforminputcontext/libfcitx5platforminputcontextplugin.so "${plugin_src}"
+                ) && build_ok=1 || true
+            fi
+            if [[ "${build_ok}" != "1" ]]; then
+                log "  编译 fcitx5-qt 插件失败或源码不可用，跳过"
+            fi
+        fi
+    fi
+
     if [[ ! -f "${plugin_src}" ]]; then
         if is_truthy "${REQUIRE_FCITX_PLUGIN:-0}"; then
             die "fcitx5 Qt6 插件未找到: ${plugin_src}"
@@ -112,11 +137,47 @@ verify_fcitx_plugin() {
     printf '%s\n' "${ldd_output}"
 
     if grep -q 'not found' <<<"${ldd_output}"; then
-        if is_truthy "${REQUIRE_FCITX_PLUGIN:-0}"; then
-            die "fcitx5 Qt6 输入法插件存在未解析依赖"
+        # 尝试将缺失的依赖库复制到 lib/system
+        local system_lib_dir="${APP_BUNDLE}/lib/system"
+        mkdir -p "${system_lib_dir}"
+        local missing_libs
+        missing_libs="$(grep 'not found' <<<"${ldd_output}" | awk '{print $1}' || true)"
+        local all_resolved=1
+        for lib in ${missing_libs}; do
+            local found_path=""
+            for search_dir in \
+                "/usr/lib/$(dpkg --print-architecture 2>/dev/null || echo 'aarch64')-linux-gnu" \
+                "/usr/lib/aarch64-linux-gnu" \
+                "/usr/lib/x86_64-linux-gnu" \
+                "/usr/lib64" \
+                "/usr/lib" \
+                "/lib/aarch64-linux-gnu" \
+                "/lib/x86_64-linux-gnu"; do
+                if [[ -f "${search_dir}/${lib}" ]]; then
+                    found_path="${search_dir}/${lib}"
+                    break
+                fi
+            done
+            if [[ -n "${found_path}" ]]; then
+                cp -L "${found_path}" "${system_lib_dir}/${lib}"
+                log "  复制 fcitx5 依赖: ${found_path} -> lib/system/${lib}"
+            else
+                log "  警告: 无法找到 fcitx5 依赖库: ${lib}"
+                all_resolved=0
+            fi
+        done
+
+        # 再次验证
+        ldd_output="$(LD_LIBRARY_PATH="${runtime_library_path}" ldd "${plugin_path}" 2>&1 || true)"
+        if grep -q 'not found' <<<"${ldd_output}"; then
+            if is_truthy "${REQUIRE_FCITX_PLUGIN:-0}"; then
+                die "fcitx5 Qt6 输入法插件存在未解析依赖"
+            fi
+            log "警告: fcitx5 Qt6 输入法插件部分依赖仍无法解析，保留插件（运行时将尝试系统插件）"
+            printf '%s\n' "${ldd_output}" | grep 'not found' || true
+        else
+            log "fcitx5 Qt6 输入法插件依赖已全部解析"
         fi
-        log "警告: fcitx5 Qt6 输入法插件依赖当前打包运行时无法解析，已移除该插件并继续打包"
-        rm -f "${plugin_path}"
     fi
 }
 
