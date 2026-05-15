@@ -312,7 +312,6 @@ Item {
                                         font.pixelSize: 14
                                         color: "#333333"
                                         text: loginController ? loginController.suggestedUsername : ""
-                                        onActiveFocusChanged: if (activeFocus && Qt.platform.os === "linux") Qt.inputMethod.show()
                                         
                                         Text {
                                             visible: usernameInput.text.length === 0
@@ -371,7 +370,6 @@ Item {
                                         echoMode: loginPage.passwordVisible ? TextInput.Normal : TextInput.Password
                                         inputMethodHints: Qt.ImhHiddenText | Qt.ImhSensitiveData | Qt.ImhNoPredictiveText
                                         text: loginController ? loginController.suggestedPassword : ""
-                                        onActiveFocusChanged: if (activeFocus && Qt.platform.os === "linux") Qt.inputMethod.show()
                                         
                                         Text {
                                             visible: passwordInput.text.length === 0

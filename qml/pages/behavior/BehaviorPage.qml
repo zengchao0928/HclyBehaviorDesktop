@@ -460,7 +460,6 @@ Item {
                                 selectByMouse: true
                                 inputMethodHints: Qt.ImhPreferLowercase
                                 text: controller ? controller.remark : ""
-                                onActiveFocusChanged: if (activeFocus && Qt.platform.os === "linux") Qt.inputMethod.show()
                                 onTextChanged: if (controller && activeFocus) controller.setRemark(text)
 
                                 Text {

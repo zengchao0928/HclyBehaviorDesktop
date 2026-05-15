@@ -159,44 +159,6 @@ ApplicationWindow {
         onClicked: windowManager.switchToPage("network")
     }
 
-    Loader {
-        id: virtualKeyboardLoader
-        property bool keyboardActive: status === Loader.Ready && item && item.active
-
-        anchors.left: parent.left
-        anchors.right: parent.right
-        height: item ? item.implicitHeight : 0
-        y: keyboardActive ? parent.height - height : parent.height
-        active: Qt.platform.os === "linux"
-        source: active ? "components/VirtualKeyboardPanel.qml" : ""
-        visible: status === Loader.Ready
-        z: 998
-
-        onLoaded: console.info("虚拟键盘组件已加载")
-
-        onStatusChanged: {
-            if (status === Loader.Error) {
-                console.warn("虚拟键盘组件加载失败:", errorString())
-            }
-        }
-
-        Connections {
-            target: virtualKeyboardLoader.item
-            ignoreUnknownSignals: true
-
-            function onActiveChanged() {
-                console.info("虚拟键盘状态变化: active=" + virtualKeyboardLoader.keyboardActive + ", inputMethodVisible=" + Qt.inputMethod.visible)
-            }
-        }
-
-        Behavior on y {
-            NumberAnimation {
-                duration: 180
-                easing.type: Easing.OutCubic
-            }
-        }
-    }
-
     Item {
         id: fatalErrorOverlay
         anchors.fill: parent

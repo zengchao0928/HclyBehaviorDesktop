@@ -38,8 +38,12 @@ def _configure_qt_quick_controls_style(logger: logging.Logger) -> None:
         os.environ.setdefault("QT_XCB_GL_INTEGRATION", "none")
         os.environ.setdefault("GDK_BACKEND", "x11")
         os.environ.setdefault("GTK_IM_MODULE", "fcitx")
-        os.environ.setdefault("QT_IM_MODULE", os.environ.get("HCLY_QT_IM_MODULE", "qtvirtualkeyboard"))
-        os.environ.setdefault("QT_VIRTUALKEYBOARD_DESKTOP_DISABLE", "0")
+        qt_im_module = os.environ.get("HCLY_QT_IM_MODULE") or os.environ.get("QT_IM_MODULE") or "xim"
+        os.environ["QT_IM_MODULE"] = qt_im_module
+        if qt_im_module == "qtvirtualkeyboard":
+            os.environ.setdefault("QT_VIRTUALKEYBOARD_DESKTOP_DISABLE", "0")
+        else:
+            os.environ.setdefault("QT_VIRTUALKEYBOARD_DESKTOP_DISABLE", "1")
         os.environ.setdefault("XMODIFIERS", "@im=fcitx")
 
         if qpa_platform == "xcb":
