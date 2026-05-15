@@ -84,6 +84,7 @@ KEEP_EXTRA_QML=1 bash docker/build-deb-amd64.sh
 ENABLE_UPX=1 bash docker/build-deb-amd64.sh
 BUNDLE_SYSTEM_LIBS=1 bash docker/build-deb-amd64.sh
 BUNDLE_GLIBC=0 bash docker/build-deb-amd64.sh
+REQUIRE_FCITX_PLUGIN=1 bash docker/build-deb-amd64.sh
 ```
 
 - `APP_VERSION`：修改输出包版本；不传时默认读取 `src/config/settings.py` 中的 `APP_VERSION`。
@@ -92,6 +93,7 @@ BUNDLE_GLIBC=0 bash docker/build-deb-amd64.sh
 - `ENABLE_UPX=1`：启用 UPX 压缩；体积更小，但 Qt 动态库在部分系统上可能不稳定。
 - `BUNDLE_SYSTEM_LIBS=1`：额外携带 Qt/X11 等系统库，兼容性更强但体积明显变大；arm64 构建脚本默认启用，可用 `BUNDLE_SYSTEM_LIBS=0 bash docker/build-deb-arm64.sh` 关闭。
 - `BUNDLE_GLIBC=0`：不携带 glibc，体积更小，但目标机 glibc 偏老时会无法启动。
+- `REQUIRE_FCITX_PLUGIN=1`：强制要求 fcitx5 Qt6 输入法插件存在且依赖可解析；默认关闭，插件不兼容时会移除插件并继续打包。
 
 ## 目标机排查
 

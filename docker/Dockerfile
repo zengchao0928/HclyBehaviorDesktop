@@ -7,8 +7,8 @@
 # PySide6 pip wheel 不包含 Qt6 C++ 开发头文件，Debian Bullseye 也没有 Qt6 包，
 # 因此在 Bookworm（有 qt6-base-dev）中编译插件，再复制到最终镜像。
 #
-# 编译出的 .so 只依赖 Qt6 的 C++ ABI（libQt6Core/Gui/DBus），
-# PySide6 自带的 Qt6 运行时可以满足这些依赖。
+# Bookworm 编译出的 .so 可能要求比 Bullseye 更新的 glibc；最终打包脚本
+# 会在运行时镜像内校验，默认移除不兼容插件，避免输入法增强项阻断 deb 构建。
 FROM debian:bookworm-slim AS fcitx5-builder
 
 ENV DEBIAN_FRONTEND=noninteractive

@@ -14,6 +14,13 @@ log() {
     printf '\n==> %s\n' "$*"
 }
 
+is_truthy() {
+    case "${1:-}" in
+        1|true|TRUE|yes|YES|on|ON) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
@@ -60,6 +67,9 @@ install_fcitx_plugin() {
     local plugin_dst="${APP_BUNDLE}/_internal/PySide6/Qt/plugins/platforminputcontexts"
 
     if [[ ! -f "${plugin_src}" ]]; then
+        if is_truthy "${REQUIRE_FCITX_PLUGIN:-0}"; then
+            die "fcitx5 Qt6 插件未找到: ${plugin_src}"
+        fi
         log "警告: fcitx5 Qt6 插件未找到 (${plugin_src})，跳过"
         return 0
     fi
@@ -75,7 +85,11 @@ verify_fcitx_plugin() {
     local plugin_path="${APP_BUNDLE}/_internal/PySide6/Qt/plugins/platforminputcontexts/libfcitx5platforminputcontextplugin.so"
 
     if [[ ! -f "${plugin_path}" ]]; then
-        die "fcitx5 Qt6 输入法插件缺失: ${plugin_path}"
+        if is_truthy "${REQUIRE_FCITX_PLUGIN:-0}"; then
+            die "fcitx5 Qt6 输入法插件缺失: ${plugin_path}"
+        fi
+        log "警告: fcitx5 Qt6 输入法插件缺失，继续打包"
+        return 0
     fi
 
     local runtime_library_path="${APP_BUNDLE}/lib/system:${APP_BUNDLE}/_internal:${APP_BUNDLE}/_internal/PySide6/Qt/lib"
@@ -84,7 +98,11 @@ verify_fcitx_plugin() {
     printf '%s\n' "${ldd_output}"
 
     if grep -q 'not found' <<<"${ldd_output}"; then
-        die "fcitx5 Qt6 输入法插件存在未解析依赖"
+        if is_truthy "${REQUIRE_FCITX_PLUGIN:-0}"; then
+            die "fcitx5 Qt6 输入法插件存在未解析依赖"
+        fi
+        log "警告: fcitx5 Qt6 输入法插件依赖当前打包运行时无法解析，已移除该插件并继续打包"
+        rm -f "${plugin_path}"
     fi
 }
 
@@ -143,6 +161,17 @@ while [[ -L "\${SELF_PATH}" ]]; do
     [[ "\${SELF_PATH}" == /* ]] || SELF_PATH="\${SELF_DIR}/\${SELF_PATH}"
 done
 APP_DIR="\$(cd -P "\$(dirname "\${SELF_PATH}")" && pwd)"
+FCITX_PLUGIN_PATH="\${APP_DIR}/_internal/PySide6/Qt/plugins/platforminputcontexts/libfcitx5platforminputcontextplugin.so"
+FCITX_SYSTEM_PLUGIN_FOUND=0
+for plugin_dir in \
+    "/usr/lib/\$(uname -m)-linux-gnu/qt6/plugins/platforminputcontexts" \
+    "/usr/lib64/qt6/plugins/platforminputcontexts" \
+    "/usr/lib/qt6/plugins/platforminputcontexts"; do
+    if [[ -f "\${plugin_dir}/libfcitx5platforminputcontextplugin.so" ]]; then
+        FCITX_SYSTEM_PLUGIN_FOUND=1
+        break
+    fi
+done
 
 if [[ "\${HCLY_LAUNCH_LOG:-1}" == "1" ]]; then
     LOG_DIR="\${APP_DIR}/logs"
@@ -175,14 +204,20 @@ export QT_QPA_PLATFORM="\${HCLY_QT_QPA_PLATFORM:-xcb}"
 export QT_XCB_GL_INTEGRATION="\${QT_XCB_GL_INTEGRATION:-none}"
 export GDK_BACKEND="\${GDK_BACKEND:-x11}"
 export GTK_IM_MODULE="\${GTK_IM_MODULE:-fcitx}"
-export QT_IM_MODULE="\${QT_IM_MODULE:-fcitx}"
+if [[ -n "\${QT_IM_MODULE+x}" ]]; then
+    export QT_IM_MODULE="\${QT_IM_MODULE}"
+elif [[ -f "\${FCITX_PLUGIN_PATH}" || "\${FCITX_SYSTEM_PLUGIN_FOUND}" == "1" ]]; then
+    export QT_IM_MODULE="fcitx"
+else
+    export QT_IM_MODULE="compose"
+fi
 export XMODIFIERS="\${XMODIFIERS:-@im=fcitx}"
 if [[ "\${QT_QPA_PLATFORM}" == "xcb" ]]; then
     export WAYLAND_DISPLAY="\${HCLY_WAYLAND_DISPLAY:-}"
 elif [[ -n "\${HCLY_WAYLAND_DISPLAY+x}" ]]; then
     export WAYLAND_DISPLAY="\${HCLY_WAYLAND_DISPLAY}"
 fi
-export QT_PLUGIN_PATH="\${APP_DIR}/_internal/PySide6/Qt/plugins:/usr/lib/\$(uname -m)-linux-gnu/qt6/plugins:/usr/lib64/qt6/plugins\${QT_PLUGIN_PATH:+:\${QT_PLUGIN_PATH}}"
+export QT_PLUGIN_PATH="\${APP_DIR}/_internal/PySide6/Qt/plugins:/usr/lib/\$(uname -m)-linux-gnu/qt6/plugins:/usr/lib64/qt6/plugins:/usr/lib/qt6/plugins\${QT_PLUGIN_PATH:+:\${QT_PLUGIN_PATH}}"
 export QT_QPA_PLATFORM_PLUGIN_PATH="\${APP_DIR}/_internal/PySide6/Qt/plugins/platforms"
 export QML_IMPORT_PATH="\${APP_DIR}/_internal/PySide6/Qt/qml:\${APP_DIR}/_internal/qml:\${APP_DIR}/_internal/library/network_chucker/qml\${QML_IMPORT_PATH:+:\${QML_IMPORT_PATH}}"
 APP_NATIVE_LIBRARY_PATH="\${APP_DIR}/lib/system:\${APP_DIR}/_internal:\${APP_DIR}/_internal/PySide6/Qt/lib"
@@ -233,12 +268,13 @@ if [[ "\${HCLY_DEBUG_LAUNCH:-0}" == "1" ]]; then
     printf 'WAYLAND_DISPLAY=%s\n' "\${WAYLAND_DISPLAY:-}" >&2
     printf 'QT_PLUGIN_PATH=%s\n' "\${QT_PLUGIN_PATH}" >&2
     printf 'QT_QPA_PLATFORM_PLUGIN_PATH=%s\n' "\${QT_QPA_PLATFORM_PLUGIN_PATH}" >&2
-    printf 'FCITX_PLUGIN=%s\n' "\${APP_DIR}/_internal/PySide6/Qt/plugins/platforminputcontexts/libfcitx5platforminputcontextplugin.so" >&2
-    if [[ -f "\${APP_DIR}/_internal/PySide6/Qt/plugins/platforminputcontexts/libfcitx5platforminputcontextplugin.so" ]]; then
+    printf 'FCITX_PLUGIN=%s\n' "\${FCITX_PLUGIN_PATH}" >&2
+    if [[ -f "\${FCITX_PLUGIN_PATH}" ]]; then
         printf 'FCITX_PLUGIN_EXISTS=1\n' >&2
     else
         printf 'FCITX_PLUGIN_EXISTS=0\n' >&2
     fi
+    printf 'FCITX_SYSTEM_PLUGIN_FOUND=%s\n' "\${FCITX_SYSTEM_PLUGIN_FOUND}" >&2
     printf 'HCLY_SOFTWARE_RENDERING=%s\n' "\${HCLY_SOFTWARE_RENDERING:-1}" >&2
 fi
 
@@ -978,8 +1014,8 @@ main() {
     write_default_config
     write_launcher
     prune_qt_bundle
-    bundle_system_libs
     verify_fcitx_plugin
+    bundle_system_libs
     bundle_glibc_runtime
     strip_elf_files
     report_bundle_size
