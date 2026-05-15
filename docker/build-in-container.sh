@@ -80,6 +80,20 @@ install_fcitx_plugin() {
     log "fcitx5 Qt6 插件已复制到: ${plugin_dst}"
 }
 
+prune_unmanaged_fcitx_plugins() {
+    local plugin_dir="${APP_BUNDLE}/_internal/PySide6/Qt/plugins/platforminputcontexts"
+    [[ -d "${plugin_dir}" ]] || return 0
+
+    while IFS= read -r -d '' plugin_path; do
+        log "移除未验证的 fcitx Qt 输入法插件: ${plugin_path}"
+        rm -f "${plugin_path}"
+    done < <(
+        find "${plugin_dir}" -maxdepth 1 -type f -name '*fcitx*.so' \
+            ! -name 'libfcitx5platforminputcontextplugin.so' \
+            -print0
+    )
+}
+
 verify_fcitx_plugin() {
     log "检查 fcitx5 Qt6 输入法插件依赖"
     local plugin_path="${APP_BUNDLE}/_internal/PySide6/Qt/plugins/platforminputcontexts/libfcitx5platforminputcontextplugin.so"
@@ -162,12 +176,13 @@ while [[ -L "\${SELF_PATH}" ]]; do
 done
 APP_DIR="\$(cd -P "\$(dirname "\${SELF_PATH}")" && pwd)"
 FCITX_PLUGIN_PATH="\${APP_DIR}/_internal/PySide6/Qt/plugins/platforminputcontexts/libfcitx5platforminputcontextplugin.so"
+FCITX_LEGACY_PLUGIN_PATH="\${APP_DIR}/_internal/PySide6/Qt/plugins/platforminputcontexts/libfcitxplatforminputcontextplugin-qt6.so"
 FCITX_SYSTEM_PLUGIN_FOUND=0
 for plugin_dir in \
     "/usr/lib/\$(uname -m)-linux-gnu/qt6/plugins/platforminputcontexts" \
     "/usr/lib64/qt6/plugins/platforminputcontexts" \
     "/usr/lib/qt6/plugins/platforminputcontexts"; do
-    if [[ -f "\${plugin_dir}/libfcitx5platforminputcontextplugin.so" ]]; then
+    if [[ -f "\${plugin_dir}/libfcitx5platforminputcontextplugin.so" || -f "\${plugin_dir}/libfcitxplatforminputcontextplugin-qt6.so" ]]; then
         FCITX_SYSTEM_PLUGIN_FOUND=1
         break
     fi
@@ -204,13 +219,8 @@ export QT_QPA_PLATFORM="\${HCLY_QT_QPA_PLATFORM:-xcb}"
 export QT_XCB_GL_INTEGRATION="\${QT_XCB_GL_INTEGRATION:-none}"
 export GDK_BACKEND="\${GDK_BACKEND:-x11}"
 export GTK_IM_MODULE="\${GTK_IM_MODULE:-fcitx}"
-if [[ -n "\${QT_IM_MODULE+x}" ]]; then
-    export QT_IM_MODULE="\${QT_IM_MODULE}"
-elif [[ -f "\${FCITX_PLUGIN_PATH}" || "\${FCITX_SYSTEM_PLUGIN_FOUND}" == "1" ]]; then
-    export QT_IM_MODULE="fcitx"
-else
-    export QT_IM_MODULE="compose"
-fi
+export QT_IM_MODULE="\${HCLY_QT_IM_MODULE:-qtvirtualkeyboard}"
+export QT_VIRTUALKEYBOARD_DESKTOP_DISABLE="\${QT_VIRTUALKEYBOARD_DESKTOP_DISABLE:-0}"
 export XMODIFIERS="\${XMODIFIERS:-@im=fcitx}"
 if [[ "\${QT_QPA_PLATFORM}" == "xcb" ]]; then
     export WAYLAND_DISPLAY="\${HCLY_WAYLAND_DISPLAY:-}"
@@ -264,12 +274,15 @@ if [[ "\${HCLY_DEBUG_LAUNCH:-0}" == "1" ]]; then
     printf 'GDK_BACKEND=%s\n' "\${GDK_BACKEND}" >&2
     printf 'GTK_IM_MODULE=%s\n' "\${GTK_IM_MODULE}" >&2
     printf 'QT_IM_MODULE=%s\n' "\${QT_IM_MODULE}" >&2
+    printf 'HCLY_QT_IM_MODULE=%s\n' "\${HCLY_QT_IM_MODULE:-}" >&2
+    printf 'QT_VIRTUALKEYBOARD_DESKTOP_DISABLE=%s\n' "\${QT_VIRTUALKEYBOARD_DESKTOP_DISABLE}" >&2
     printf 'XMODIFIERS=%s\n' "\${XMODIFIERS}" >&2
     printf 'WAYLAND_DISPLAY=%s\n' "\${WAYLAND_DISPLAY:-}" >&2
     printf 'QT_PLUGIN_PATH=%s\n' "\${QT_PLUGIN_PATH}" >&2
     printf 'QT_QPA_PLATFORM_PLUGIN_PATH=%s\n' "\${QT_QPA_PLATFORM_PLUGIN_PATH}" >&2
     printf 'FCITX_PLUGIN=%s\n' "\${FCITX_PLUGIN_PATH}" >&2
-    if [[ -f "\${FCITX_PLUGIN_PATH}" ]]; then
+    printf 'FCITX_LEGACY_PLUGIN=%s\n' "\${FCITX_LEGACY_PLUGIN_PATH}" >&2
+    if [[ -f "\${FCITX_PLUGIN_PATH}" || -f "\${FCITX_LEGACY_PLUGIN_PATH}" ]]; then
         printf 'FCITX_PLUGIN_EXISTS=1\n' >&2
     else
         printf 'FCITX_PLUGIN_EXISTS=0\n' >&2
@@ -487,7 +500,6 @@ prune_qt_bundle() {
             sqldrivers \
             texttospeech \
             tls \
-            virtualkeyboard \
             webview \
             xcbglintegrations; do
             remove_if_exists "${plugins_dir}/${dir_name}"
@@ -566,7 +578,6 @@ prune_qt_bundle() {
         "${qt_qml_dir}/QtQuick/Shapes" \
         "${qt_qml_dir}/QtQuick/Timeline" \
         "${qt_qml_dir}/QtQuick/VectorImage" \
-        "${qt_qml_dir}/QtQuick/VirtualKeyboard" \
         "${qt_qml_dir}/QtQuick/tooling"; do
         remove_if_exists "${qml_path}"
     done
@@ -605,7 +616,6 @@ prune_qt_bundle() {
             -o -name 'libQt6Sql*.so*' \
             -o -name 'libQt6Test*.so*' \
             -o -name 'libQt6TextToSpeech*.so*' \
-            -o -name 'libQt6VirtualKeyboard*.so*' \
             -o -name 'libQt6Wayland*.so*' \
             -o -name 'libQt6Web*.so*' \
             -o -name 'libQt6WlShellIntegration*.so*' \
@@ -663,7 +673,8 @@ export QT_QPA_PLATFORM="\${HCLY_QT_QPA_PLATFORM:-xcb}"
 export QT_XCB_GL_INTEGRATION="\${QT_XCB_GL_INTEGRATION:-none}"
 export GDK_BACKEND="\${GDK_BACKEND:-x11}"
 export GTK_IM_MODULE="\${GTK_IM_MODULE:-fcitx}"
-export QT_IM_MODULE="\${QT_IM_MODULE:-fcitx}"
+export QT_IM_MODULE="\${HCLY_QT_IM_MODULE:-qtvirtualkeyboard}"
+export QT_VIRTUALKEYBOARD_DESKTOP_DISABLE="\${QT_VIRTUALKEYBOARD_DESKTOP_DISABLE:-0}"
 export XMODIFIERS="\${XMODIFIERS:-@im=fcitx}"
 if [[ "\${QT_QPA_PLATFORM}" == "xcb" ]]; then
     export WAYLAND_DISPLAY="\${HCLY_WAYLAND_DISPLAY:-}"
@@ -1011,6 +1022,7 @@ main() {
     prepare_dirs
     build_app
     install_fcitx_plugin
+    prune_unmanaged_fcitx_plugins
     write_default_config
     write_launcher
     prune_qt_bundle

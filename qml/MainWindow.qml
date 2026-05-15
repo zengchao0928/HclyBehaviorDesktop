@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.VirtualKeyboard
 import NetworkInspector 1.0
 import "components"
 
@@ -157,6 +158,22 @@ ApplicationWindow {
         anchors.bottomMargin: 32
         z: 997
         onClicked: windowManager.switchToPage("network")
+    }
+
+    InputPanel {
+        id: virtualKeyboardPanel
+        anchors.left: parent.left
+        anchors.right: parent.right
+        y: Qt.inputMethod.visible ? parent.height - height : parent.height
+        visible: Qt.inputMethod.visible
+        z: 998
+
+        Behavior on y {
+            NumberAnimation {
+                duration: 180
+                easing.type: Easing.OutCubic
+            }
+        }
     }
 
     Item {

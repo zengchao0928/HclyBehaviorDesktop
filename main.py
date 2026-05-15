@@ -38,7 +38,8 @@ def _configure_qt_quick_controls_style(logger: logging.Logger) -> None:
         os.environ.setdefault("QT_XCB_GL_INTEGRATION", "none")
         os.environ.setdefault("GDK_BACKEND", "x11")
         os.environ.setdefault("GTK_IM_MODULE", "fcitx")
-        os.environ.setdefault("QT_IM_MODULE", "fcitx")
+        os.environ.setdefault("QT_IM_MODULE", os.environ.get("HCLY_QT_IM_MODULE", "qtvirtualkeyboard"))
+        os.environ.setdefault("QT_VIRTUALKEYBOARD_DESKTOP_DISABLE", "0")
         os.environ.setdefault("XMODIFIERS", "@im=fcitx")
 
         if qpa_platform == "xcb":
@@ -48,12 +49,14 @@ def _configure_qt_quick_controls_style(logger: logging.Logger) -> None:
 
         logger.info(
             "Linux input method environment: QT_QPA_PLATFORM=%s, GTK_IM_MODULE=%s, "
-            "QT_IM_MODULE=%s, XMODIFIERS=%s, WAYLAND_DISPLAY=%s",
+            "QT_IM_MODULE=%s, XMODIFIERS=%s, WAYLAND_DISPLAY=%s, "
+            "QT_VIRTUALKEYBOARD_DESKTOP_DISABLE=%s",
             os.environ.get("QT_QPA_PLATFORM", ""),
             os.environ.get("GTK_IM_MODULE", ""),
             os.environ.get("QT_IM_MODULE", ""),
             os.environ.get("XMODIFIERS", ""),
             os.environ.get("WAYLAND_DISPLAY", ""),
+            os.environ.get("QT_VIRTUALKEYBOARD_DESKTOP_DISABLE", ""),
         )
 
 
