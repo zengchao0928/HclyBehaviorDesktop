@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.VirtualKeyboard
 import NetworkInspector 1.0
 import "components"
 
@@ -160,13 +159,22 @@ ApplicationWindow {
         onClicked: windowManager.switchToPage("network")
     }
 
-    InputPanel {
-        id: virtualKeyboardPanel
+    Loader {
+        id: virtualKeyboardLoader
         anchors.left: parent.left
         anchors.right: parent.right
-        y: Qt.inputMethod.visible ? parent.height - height : parent.height
-        visible: Qt.inputMethod.visible
+        height: item ? item.implicitHeight : 0
+        y: visible ? parent.height - height : parent.height
+        active: Qt.platform.os === "linux"
+        source: active ? "components/VirtualKeyboardPanel.qml" : ""
+        visible: status === Loader.Ready && Qt.inputMethod.visible
         z: 998
+
+        onStatusChanged: {
+            if (status === Loader.Error) {
+                console.warn("虚拟键盘组件加载失败:", errorString())
+            }
+        }
 
         Behavior on y {
             NumberAnimation {
