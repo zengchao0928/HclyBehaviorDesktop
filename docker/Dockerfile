@@ -61,7 +61,10 @@ RUN set -eux; \
         -DENABLE_QT4=OFF \
         -DENABLE_QT5=OFF \
         -DENABLE_QT6=ON \
-        -DBUILD_ONLY_PLUGIN=ON && \
+        -DBUILD_ONLY_PLUGIN=ON \
+        -DCMAKE_SHARED_LINKER_FLAGS="-static-libstdc++ -static-libgcc" \
+        -DCMAKE_MODULE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" \
+        -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" && \
     make -j"$(nproc)" && \
     cp /tmp/fcitx5-qt/build/qt6/platforminputcontext/libfcitx5platforminputcontextplugin.so /tmp/ && \
     rm -rf /tmp/fcitx5-qt /var/lib/apt/lists/*
