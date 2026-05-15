@@ -177,6 +177,9 @@ done
 APP_DIR="\$(cd -P "\$(dirname "\${SELF_PATH}")" && pwd)"
 FCITX_PLUGIN_PATH="\${APP_DIR}/_internal/PySide6/Qt/plugins/platforminputcontexts/libfcitx5platforminputcontextplugin.so"
 FCITX_LEGACY_PLUGIN_PATH="\${APP_DIR}/_internal/PySide6/Qt/plugins/platforminputcontexts/libfcitxplatforminputcontextplugin-qt6.so"
+IBUS_PLUGIN_PATH="\${APP_DIR}/_internal/PySide6/Qt/plugins/platforminputcontexts/libibusplatforminputcontextplugin.so"
+WAYLAND_PLATFORM_PLUGIN="\${APP_DIR}/_internal/PySide6/Qt/plugins/platforms/libqwayland-generic.so"
+WAYLAND_EGL_PLATFORM_PLUGIN="\${APP_DIR}/_internal/PySide6/Qt/plugins/platforms/libqwayland-egl.so"
 FCITX_SYSTEM_PLUGIN_FOUND=0
 for plugin_dir in \
     "/usr/lib/\$(uname -m)-linux-gnu/qt6/plugins/platforminputcontexts" \
@@ -187,6 +190,42 @@ for plugin_dir in \
         break
     fi
 done
+
+choose_qpa_platform() {
+    if [[ -n "\${HCLY_QT_QPA_PLATFORM:-}" ]]; then
+        printf '%s\n' "\${HCLY_QT_QPA_PLATFORM}"
+        return
+    fi
+    if [[ -n "\${QT_QPA_PLATFORM:-}" ]]; then
+        printf '%s\n' "\${QT_QPA_PLATFORM}"
+        return
+    fi
+    if [[ "\${XDG_SESSION_TYPE:-}" == "wayland" && -n "\${WAYLAND_DISPLAY:-}" && ( -f "\${WAYLAND_PLATFORM_PLUGIN}" || -f "\${WAYLAND_EGL_PLATFORM_PLUGIN}" ) ]]; then
+        printf '%s\n' "wayland;xcb"
+        return
+    fi
+    printf '%s\n' "xcb"
+}
+
+choose_qt_im_module() {
+    if [[ -n "\${HCLY_QT_IM_MODULE+x}" ]]; then
+        printf '%s\n' "\${HCLY_QT_IM_MODULE}"
+        return
+    fi
+    if [[ "\${QT_QPA_PLATFORM}" == *wayland* ]]; then
+        printf '%s\n' ""
+        return
+    fi
+    if [[ -f "\${FCITX_PLUGIN_PATH}" || -f "\${FCITX_LEGACY_PLUGIN_PATH}" || "\${FCITX_SYSTEM_PLUGIN_FOUND}" == "1" ]]; then
+        printf '%s\n' "fcitx"
+        return
+    fi
+    if [[ -f "\${IBUS_PLUGIN_PATH}" ]]; then
+        printf '%s\n' "ibus"
+        return
+    fi
+    printf '%s\n' "xim"
+}
 
 if [[ "\${HCLY_LAUNCH_LOG:-1}" == "1" ]]; then
     LOG_DIR="\${APP_DIR}/logs"
@@ -215,16 +254,28 @@ if [[ "\${HCLY_LAUNCH_LOG:-1}" == "1" ]]; then
 fi
 
 export QT_QUICK_CONTROLS_STYLE="\${QT_QUICK_CONTROLS_STYLE:-Basic}"
-export QT_QPA_PLATFORM="\${HCLY_QT_QPA_PLATFORM:-xcb}"
+export QT_QPA_PLATFORM="\$(choose_qpa_platform)"
 export QT_XCB_GL_INTEGRATION="\${QT_XCB_GL_INTEGRATION:-none}"
-export GDK_BACKEND="\${GDK_BACKEND:-x11}"
-export GTK_IM_MODULE="\${GTK_IM_MODULE:-fcitx}"
-export QT_IM_MODULE="\${HCLY_QT_IM_MODULE:-\${QT_IM_MODULE:-xim}}"
-if [[ "\${QT_IM_MODULE}" == "qtvirtualkeyboard" ]]; then
-    export QT_VIRTUALKEYBOARD_DESKTOP_DISABLE="\${QT_VIRTUALKEYBOARD_DESKTOP_DISABLE:-0}"
+if [[ "\${QT_QPA_PLATFORM}" == *wayland* ]]; then
+    export GDK_BACKEND="\${GDK_BACKEND:-wayland,x11}"
 else
-    export QT_VIRTUALKEYBOARD_DESKTOP_DISABLE="\${QT_VIRTUALKEYBOARD_DESKTOP_DISABLE:-1}"
+    export GDK_BACKEND="\${GDK_BACKEND:-x11}"
 fi
+export GTK_IM_MODULE="\${GTK_IM_MODULE:-fcitx}"
+if [[ -z "\${HCLY_QT_IM_MODULE+x}" ]]; then
+    if [[ "\${QT_QPA_PLATFORM}" == *wayland* ]]; then
+        export QT_IM_MODULES="\${QT_IM_MODULES:-wayland;fcitx;ibus}"
+    else
+        export QT_IM_MODULES="\${QT_IM_MODULES:-fcitx;ibus;xim}"
+    fi
+fi
+QT_IM_MODULE_CHOICE="\$(choose_qt_im_module)"
+if [[ -n "\${QT_IM_MODULE_CHOICE}" ]]; then
+    export QT_IM_MODULE="\${QT_IM_MODULE_CHOICE}"
+else
+    unset QT_IM_MODULE
+fi
+export QT_VIRTUALKEYBOARD_DESKTOP_DISABLE="\${QT_VIRTUALKEYBOARD_DESKTOP_DISABLE:-1}"
 export XMODIFIERS="\${XMODIFIERS:-@im=fcitx}"
 if [[ "\${QT_QPA_PLATFORM}" == "xcb" ]]; then
     export WAYLAND_DISPLAY="\${HCLY_WAYLAND_DISPLAY:-}"
@@ -277,7 +328,8 @@ if [[ "\${HCLY_DEBUG_LAUNCH:-0}" == "1" ]]; then
     printf 'QT_XCB_GL_INTEGRATION=%s\n' "\${QT_XCB_GL_INTEGRATION}" >&2
     printf 'GDK_BACKEND=%s\n' "\${GDK_BACKEND}" >&2
     printf 'GTK_IM_MODULE=%s\n' "\${GTK_IM_MODULE}" >&2
-    printf 'QT_IM_MODULE=%s\n' "\${QT_IM_MODULE}" >&2
+    printf 'QT_IM_MODULE=%s\n' "\${QT_IM_MODULE:-}" >&2
+    printf 'QT_IM_MODULES=%s\n' "\${QT_IM_MODULES:-}" >&2
     printf 'HCLY_QT_IM_MODULE=%s\n' "\${HCLY_QT_IM_MODULE:-}" >&2
     printf 'QT_VIRTUALKEYBOARD_DESKTOP_DISABLE=%s\n' "\${QT_VIRTUALKEYBOARD_DESKTOP_DISABLE}" >&2
     printf 'XMODIFIERS=%s\n' "\${XMODIFIERS}" >&2
@@ -286,6 +338,8 @@ if [[ "\${HCLY_DEBUG_LAUNCH:-0}" == "1" ]]; then
     printf 'QT_QPA_PLATFORM_PLUGIN_PATH=%s\n' "\${QT_QPA_PLATFORM_PLUGIN_PATH}" >&2
     printf 'FCITX_PLUGIN=%s\n' "\${FCITX_PLUGIN_PATH}" >&2
     printf 'FCITX_LEGACY_PLUGIN=%s\n' "\${FCITX_LEGACY_PLUGIN_PATH}" >&2
+    printf 'IBUS_PLUGIN=%s\n' "\${IBUS_PLUGIN_PATH}" >&2
+    printf 'WAYLAND_PLATFORM_PLUGIN=%s\n' "\${WAYLAND_PLATFORM_PLUGIN}" >&2
     if [[ -f "\${FCITX_PLUGIN_PATH}" || -f "\${FCITX_LEGACY_PLUGIN_PATH}" ]]; then
         printf 'FCITX_PLUGIN_EXISTS=1\n' >&2
     else
@@ -620,11 +674,13 @@ prune_qt_bundle() {
             -o -name 'libQt6Sql*.so*' \
             -o -name 'libQt6Test*.so*' \
             -o -name 'libQt6TextToSpeech*.so*' \
-            -o -name 'libQt6Wayland*.so*' \
             -o -name 'libQt6Web*.so*' \
-            -o -name 'libQt6WlShellIntegration*.so*' \
         \) -delete
+        find "${qt_lib_dir}" -maxdepth 1 -type f -name 'libQt6VirtualKeyboard*.so*' -delete
     fi
+
+    remove_if_exists "${APP_BUNDLE}/_internal/PySide6/Qt/plugins/platforminputcontexts/libqtvirtualkeyboardplugin.so"
+    remove_if_exists "${APP_BUNDLE}/_internal/PySide6/Qt/qml/QtQuick/VirtualKeyboard"
 
     local python_lib_dir="${APP_BUNDLE}/_internal"
     remove_if_exists "${python_lib_dir}/lib-dynload/_tkinter"*
@@ -673,22 +729,6 @@ make_deb_package() {
 
     cat > "${deb_root}/usr/bin/${APP_ID}" <<EOF
 #!/usr/bin/env bash
-export QT_QPA_PLATFORM="\${HCLY_QT_QPA_PLATFORM:-xcb}"
-export QT_XCB_GL_INTEGRATION="\${QT_XCB_GL_INTEGRATION:-none}"
-export GDK_BACKEND="\${GDK_BACKEND:-x11}"
-export GTK_IM_MODULE="\${GTK_IM_MODULE:-fcitx}"
-export QT_IM_MODULE="\${HCLY_QT_IM_MODULE:-\${QT_IM_MODULE:-xim}}"
-if [[ "\${QT_IM_MODULE}" == "qtvirtualkeyboard" ]]; then
-    export QT_VIRTUALKEYBOARD_DESKTOP_DISABLE="\${QT_VIRTUALKEYBOARD_DESKTOP_DISABLE:-0}"
-else
-    export QT_VIRTUALKEYBOARD_DESKTOP_DISABLE="\${QT_VIRTUALKEYBOARD_DESKTOP_DISABLE:-1}"
-fi
-export XMODIFIERS="\${XMODIFIERS:-@im=fcitx}"
-if [[ "\${QT_QPA_PLATFORM}" == "xcb" ]]; then
-    export WAYLAND_DISPLAY="\${HCLY_WAYLAND_DISPLAY:-}"
-elif [[ -n "\${HCLY_WAYLAND_DISPLAY+x}" ]]; then
-    export WAYLAND_DISPLAY="\${HCLY_WAYLAND_DISPLAY}"
-fi
 exec /opt/${APP_ID}/${APP_ID} "\$@"
 EOF
     chmod 0755 "${deb_root}/usr/bin/${APP_ID}"

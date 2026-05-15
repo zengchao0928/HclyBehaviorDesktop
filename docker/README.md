@@ -79,7 +79,7 @@ sudo nano /opt/hcly-behavior-desktop/config.json
 
 ```bash
 APP_VERSION=1.2.3 bash docker/build-deb-amd64.sh
-KEEP_WAYLAND=1 bash docker/build-deb-amd64.sh
+KEEP_WAYLAND=0 bash docker/build-deb-amd64.sh
 KEEP_EXTRA_QML=1 bash docker/build-deb-amd64.sh
 ENABLE_UPX=1 bash docker/build-deb-amd64.sh
 BUNDLE_SYSTEM_LIBS=1 bash docker/build-deb-amd64.sh
@@ -88,7 +88,7 @@ REQUIRE_FCITX_PLUGIN=1 bash docker/build-deb-amd64.sh
 ```
 
 - `APP_VERSION`：修改输出包版本；不传时默认读取 `src/config/settings.py` 中的 `APP_VERSION`。
-- `KEEP_WAYLAND=1`：额外保留 Wayland 平台插件，体积会稍大。
+- `KEEP_WAYLAND=0`：移除 Wayland 平台插件来减小体积；默认保留 Wayland，用于 UOS 默认 Wayland 会话下的中文输入。
 - `KEEP_EXTRA_QML=1`：保留更多 Qt QML 模块，适合遇到缺模块错误时排查。
 - `ENABLE_UPX=1`：启用 UPX 压缩；体积更小，但 Qt 动态库在部分系统上可能不稳定。
 - `BUNDLE_SYSTEM_LIBS=1`：额外携带 Qt/X11 等系统库，兼容性更强但体积明显变大；arm64 构建脚本默认启用，可用 `BUNDLE_SYSTEM_LIBS=0 bash docker/build-deb-arm64.sh` 关闭。
@@ -101,22 +101,22 @@ REQUIRE_FCITX_PLUGIN=1 bash docker/build-deb-amd64.sh
 
 ```bash
 HCLY_DEBUG_LAUNCH=1 /usr/bin/hcly-behavior-desktop
-HCLY_QT_QPA_PLATFORM=wayland /usr/bin/hcly-behavior-desktop
+HCLY_QT_QPA_PLATFORM=xcb /usr/bin/hcly-behavior-desktop
 HCLY_USE_BUNDLED_GLIBC=0 /usr/bin/hcly-behavior-desktop
 HCLY_SOFTWARE_RENDERING=0 /usr/bin/hcly-behavior-desktop
+HCLY_QT_IM_MODULE=wayland /usr/bin/hcly-behavior-desktop
 HCLY_QT_IM_MODULE=fcitx /usr/bin/hcly-behavior-desktop
 HCLY_QT_IM_MODULE=ibus /usr/bin/hcly-behavior-desktop
-HCLY_QT_IM_MODULE=qtvirtualkeyboard /usr/bin/hcly-behavior-desktop
 QT_DEBUG_PLUGINS=1 /usr/bin/hcly-behavior-desktop
 ```
 
 - `HCLY_DEBUG_LAUNCH=1`：打印当前 glibc 和启动模式。
-- `HCLY_QT_QPA_PLATFORM=wayland HCLY_WAYLAND_DISPLAY=wayland-0`：临时尝试 Wayland 后端；默认启动脚本会固定使用 `xcb` 并清空 `WAYLAND_DISPLAY`，让输入法走 X11/XIM。
+- `HCLY_QT_QPA_PLATFORM=xcb`：强制回退 X11/XWayland；默认在 Wayland 会话下优先使用 `wayland;xcb`，并通过 `QT_IM_MODULES=wayland;fcitx;ibus` 自动选择可用输入法。
 - `HCLY_USE_BUNDLED_GLIBC=0`：禁用包内 glibc，适合目标机系统 glibc 已经足够新时排查。
 - `HCLY_SOFTWARE_RENDERING=0`：关闭默认软件渲染，适合排查 Qt 图形后端问题。
-- `HCLY_QT_IM_MODULE=fcitx`：强制使用 Qt6 版 fcitx 输入法插件；默认优先保留系统已有 `QT_IM_MODULE`，没有时退到 `xim`，避免 Qt Virtual Keyboard 在 UOS/XWayland 下抢占鼠标焦点。
+- `HCLY_QT_IM_MODULE=wayland`：强制使用 Qt6 原生 Wayland 输入法路径，适合 UOS 默认 Wayland 会话。
+- `HCLY_QT_IM_MODULE=fcitx`：强制使用 Qt6 版 fcitx 输入法插件；只有包内或系统存在 Qt6 fcitx 插件时才建议使用。
 - `HCLY_QT_IM_MODULE=ibus`：临时尝试 Qt 自带 ibus 插件，适合现场系统启用了 ibus 或 fcitx 的 ibus 前端时排查。
-- `HCLY_QT_IM_MODULE=qtvirtualkeyboard`：仅用于临时排查 Qt 虚拟键盘，不再作为默认值。
 - `QT_DEBUG_PLUGINS=1`：输出 Qt 插件加载日志，用于确认 `platforminputcontexts/libfcitx5platforminputcontextplugin.so` 是否被找到。
 
 Docker 镜像构建阶段需要外网下载 apt 和 pip 包；目标 Linux 机器安装 deb 时只用 `dpkg`，不需要 `apt` 下载依赖。

@@ -23,27 +23,64 @@ from src.utils.exception_handler import install_global_exception_handlers
 from library.network_chucker import NetworkInspector, set_global_inspector
 
 
+def _choose_linux_qpa_platform() -> str:
+    """根据当前桌面会话选择 Qt 平台，Wayland 不可用时交给 Qt 回退到 xcb。"""
+    explicit = os.environ.get("HCLY_QT_QPA_PLATFORM") or os.environ.get("QT_QPA_PLATFORM")
+    if explicit:
+        return explicit
+
+    if os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland" and os.environ.get("WAYLAND_DISPLAY"):
+        return "wayland;xcb"
+
+    return "xcb"
+
+
+def _choose_linux_input_method(qpa_platform: str) -> str:
+    """为 Qt6 选择输入法模块，避免使用目标机缺失的 Qt6 fcitx 插件。"""
+    if "HCLY_QT_IM_MODULE" in os.environ:
+        return os.environ.get("HCLY_QT_IM_MODULE", "")
+
+    app_dir = Path(__file__).resolve().parent
+    plugin_dir = app_dir / "_internal" / "PySide6" / "Qt" / "plugins" / "platforminputcontexts"
+    fcitx_candidates = (
+        plugin_dir / "libfcitx5platforminputcontextplugin.so",
+        plugin_dir / "libfcitxplatforminputcontextplugin-qt6.so",
+    )
+
+    if "wayland" in qpa_platform:
+        os.environ.setdefault("QT_IM_MODULES", "wayland;fcitx;ibus")
+        return ""
+
+    os.environ.setdefault("QT_IM_MODULES", "fcitx;ibus;xim")
+
+    if any(path.is_file() for path in fcitx_candidates):
+        return "fcitx"
+
+    if (plugin_dir / "libibusplatforminputcontextplugin.so").is_file():
+        return "ibus"
+
+    return "xim"
+
+
 def _configure_qt_quick_controls_style(logger: logging.Logger) -> None:
     """固定使用 Basic 样式，减少不同系统原生主题差异。"""
     style = os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
     logger.info("Qt Quick Controls style: %s", style)
 
     # 国产 Linux 系统（统信 UOS / 麒麟）使用 fcitx 输入法框架，
-    # 需要固定走 X11/xcb 并补齐 XIM 环境，避免 Wayland 会话下无法输入中文。
+    # Wayland 会话优先走 Qt6 原生 Wayland text-input，X11 下再回退到插件/ibus/XIM。
     if sys.platform.startswith("linux"):
-        qpa_platform = os.environ.setdefault(
-            "QT_QPA_PLATFORM",
-            os.environ.get("HCLY_QT_QPA_PLATFORM", "xcb"),
-        )
+        qpa_platform = _choose_linux_qpa_platform()
+        os.environ["QT_QPA_PLATFORM"] = qpa_platform
         os.environ.setdefault("QT_XCB_GL_INTEGRATION", "none")
-        os.environ.setdefault("GDK_BACKEND", "x11")
+        os.environ.setdefault("GDK_BACKEND", "wayland,x11" if "wayland" in qpa_platform else "x11")
         os.environ.setdefault("GTK_IM_MODULE", "fcitx")
-        qt_im_module = os.environ.get("HCLY_QT_IM_MODULE") or os.environ.get("QT_IM_MODULE") or "xim"
-        os.environ["QT_IM_MODULE"] = qt_im_module
-        if qt_im_module == "qtvirtualkeyboard":
-            os.environ.setdefault("QT_VIRTUALKEYBOARD_DESKTOP_DISABLE", "0")
+        qt_im_module = _choose_linux_input_method(qpa_platform)
+        if qt_im_module:
+            os.environ["QT_IM_MODULE"] = qt_im_module
         else:
-            os.environ.setdefault("QT_VIRTUALKEYBOARD_DESKTOP_DISABLE", "1")
+            os.environ.pop("QT_IM_MODULE", None)
+        os.environ.setdefault("QT_VIRTUALKEYBOARD_DESKTOP_DISABLE", "1")
         os.environ.setdefault("XMODIFIERS", "@im=fcitx")
 
         if qpa_platform == "xcb":
@@ -53,11 +90,12 @@ def _configure_qt_quick_controls_style(logger: logging.Logger) -> None:
 
         logger.info(
             "Linux input method environment: QT_QPA_PLATFORM=%s, GTK_IM_MODULE=%s, "
-            "QT_IM_MODULE=%s, XMODIFIERS=%s, WAYLAND_DISPLAY=%s, "
+            "QT_IM_MODULE=%s, QT_IM_MODULES=%s, XMODIFIERS=%s, WAYLAND_DISPLAY=%s, "
             "QT_VIRTUALKEYBOARD_DESKTOP_DISABLE=%s",
             os.environ.get("QT_QPA_PLATFORM", ""),
             os.environ.get("GTK_IM_MODULE", ""),
             os.environ.get("QT_IM_MODULE", ""),
+            os.environ.get("QT_IM_MODULES", ""),
             os.environ.get("XMODIFIERS", ""),
             os.environ.get("WAYLAND_DISPLAY", ""),
             os.environ.get("QT_VIRTUALKEYBOARD_DESKTOP_DISABLE", ""),
