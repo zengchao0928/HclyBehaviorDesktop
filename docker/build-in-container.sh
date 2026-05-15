@@ -196,7 +196,15 @@ choose_qpa_platform() {
         printf '%s\n' "\${HCLY_QT_QPA_PLATFORM}"
         return
     fi
+    # 如果系统设置了 QT_QPA_PLATFORM，检查对应的插件是否存在
     if [[ -n "\${QT_QPA_PLATFORM:-}" ]]; then
+        # 如果系统要求 wayland 但 wayland 插件不存在，fallback 到 xcb
+        if [[ "\${QT_QPA_PLATFORM}" == *wayland* ]]; then
+            if [[ ! -f "\${WAYLAND_PLATFORM_PLUGIN}" && ! -f "\${WAYLAND_EGL_PLATFORM_PLUGIN}" ]]; then
+                printf '%s\n' "xcb"
+                return
+            fi
+        fi
         printf '%s\n' "\${QT_QPA_PLATFORM}"
         return
     fi
@@ -729,6 +737,13 @@ make_deb_package() {
 
     cat > "${deb_root}/usr/bin/${APP_ID}" <<EOF
 #!/usr/bin/env bash
+# 强制使用 xcb 平台，因为打包时已移除 wayland 插件（KEEP_WAYLAND=0）。
+# UOS 桌面可能设置了 QT_QPA_PLATFORM=wayland，必须在此覆盖。
+export QT_QPA_PLATFORM="\${HCLY_QT_QPA_PLATFORM:-xcb}"
+export QT_XCB_GL_INTEGRATION="\${QT_XCB_GL_INTEGRATION:-none}"
+export QT_IM_MODULE="\${QT_IM_MODULE:-fcitx}"
+export GTK_IM_MODULE="\${GTK_IM_MODULE:-fcitx}"
+export XMODIFIERS="\${XMODIFIERS:-@im=fcitx}"
 exec /opt/${APP_ID}/${APP_ID} "\$@"
 EOF
     chmod 0755 "${deb_root}/usr/bin/${APP_ID}"
